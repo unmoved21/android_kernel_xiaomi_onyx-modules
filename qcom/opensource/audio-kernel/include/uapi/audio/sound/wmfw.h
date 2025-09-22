@@ -35,8 +35,8 @@ struct wmfw_header {
 	char magic[4];
 	__le32 len;
 	__le16 rev;
-	u8 core;
-	u8 ver;
+	__u8 core;
+	__u8 ver;
 } __packed;
 
 struct wmfw_footer {
@@ -63,7 +63,7 @@ struct wmfw_region {
 		__le32 offset;
 	};
 	__le32 len;
-	u8 data[];
+	__u8 data[];
 } __packed;
 
 struct wmfw_id_hdr {
@@ -133,10 +133,10 @@ struct wmfw_halo_alg_hdr {
 
 struct wmfw_adsp_alg_data {
 	__le32 id;
-	u8 name[WMFW_MAX_ALG_NAME];
-	u8 descr[WMFW_MAX_ALG_DESCR_NAME];
+	__u8 name[WMFW_MAX_ALG_NAME];
+	__u8 descr[WMFW_MAX_ALG_DESCR_NAME];
 	__le32 ncoeff;
-	u8 data[];
+	__u8 data[];
 } __packed;
 
 struct wmfw_adsp_coeff_data {
@@ -145,16 +145,16 @@ struct wmfw_adsp_coeff_data {
 		__le16 type;
 		__le32 size;
 	} hdr;
-	u8 name[WMFW_MAX_COEFF_NAME];
-	u8 descr[WMFW_MAX_COEFF_DESCR_NAME];
+	__u8 name[WMFW_MAX_COEFF_NAME];
+	__u8 descr[WMFW_MAX_COEFF_DESCR_NAME];
 	__le16 ctl_type;
 	__le16 flags;
 	__le32 len;
-	u8 data[];
+	__u8 data[];
 } __packed;
 
 struct wmfw_coeff_hdr {
-	u8 magic[4];
+	__u8 magic[4];
 	__le32 len;
 	union {
 		__be32 rev;
@@ -164,7 +164,7 @@ struct wmfw_coeff_hdr {
 		__be32 core;
 		__le32 core_ver;
 	};
-	u8 data[];
+	__u8 data[];
 } __packed;
 
 struct wmfw_coeff_item {
@@ -174,7 +174,7 @@ struct wmfw_coeff_item {
 	__le32 ver;
 	__le32 sr;
 	__le32 len;
-	u8 data[];
+	__u8 data[];
 } __packed;
 
 #define WMFW_ADSP1 1
