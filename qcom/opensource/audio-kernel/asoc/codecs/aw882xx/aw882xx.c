@@ -2991,6 +2991,8 @@ static int aw882xx_i2c_probe(struct i2c_client *i2c,
 				   __func__);
 		}
 		return 0;
+#else
+		return ret;
 #endif
 	}
 
