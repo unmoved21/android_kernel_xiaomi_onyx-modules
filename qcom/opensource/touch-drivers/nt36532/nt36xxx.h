@@ -299,6 +299,11 @@ struct nvt_ts_data {
 	bool dev_pm_suspend;
 	struct completion dev_pm_suspend_completion;
 	/* gesture mode setup end */
+	/* FOD setup */
+	bool fod_finger;
+	int fod_setting;
+	bool display_suspend_ready;
+	/* FOD setup end */
 	/* resume use work queue setup */
 	struct work_struct resume_work;
 	/* resume use work queue setup end */

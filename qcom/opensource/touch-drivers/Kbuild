@@ -114,7 +114,7 @@ ifeq ($(TARGET_KERNEL_DLKM_DISABLE), true)
 endif
 
 ifeq ($(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE), y)
-	ccflags-y += -DTOUCH_THP_SUPPORT=1 -DTOUCH_IS_TDDI
+	ccflags-y += -DTOUCH_THP_SUPPORT=1 -DTOUCH_IS_TDDI -DTOUCH_FOD_SUPPORT
 	xiaomi_touch-y := \
 		 ./xiaomi/xiaomi_touch_core.o \
 		 ./xiaomi/xiaomi_touch_knock_data.o \

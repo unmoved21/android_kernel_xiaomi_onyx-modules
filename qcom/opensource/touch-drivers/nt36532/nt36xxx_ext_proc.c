@@ -37,6 +37,7 @@
 #define XM_HTC_IDLE_WAKE_TH "xm_htc_idle_wake_th"
 #define XM_HTC_RAW_DATA_TYPE "xm_htc_raw_data_type"
 #define XM_HTC_GESTURE_SWITCH "xm_htc_gesture_switch"
+#define XM_HTC_FOD_ENABLE "xm_htc_fod_enable"
 #define XM_HTC_SW_RESET "xm_htc_sw_reset"
 #define XM_HTC_FH_ENABLE "xm_htc_fh_enable" /* frequency hopping enable */
 #define XM_HTC_SCAN_FREQ_NO "xm_htc_scan_freq_no"
@@ -82,6 +83,7 @@ static struct proc_dir_entry *XM_HTC_proc_op_mode_entry;
 static struct proc_dir_entry *XM_HTC_proc_idle_wake_th_entry;
 static struct proc_dir_entry *XM_HTC_proc_raw_data_type_entry;
 static struct proc_dir_entry *XM_HTC_proc_gesture_switch_entry;
+static struct proc_dir_entry *XM_HTC_proc_fod_enable_entry;
 static struct proc_dir_entry *XM_HTC_proc_sw_reset_entry;
 static struct proc_dir_entry *XM_HTC_proc_fh_enable_entry;
 static struct proc_dir_entry *XM_HTC_proc_scan_freq_no_entry;
@@ -1492,6 +1494,152 @@ static const struct file_operations xm_htc_gesture_switch_fops = {
 	.owner = THIS_MODULE,
 	.read = xm_htc_gesture_switch_proc_read,
 	.write = xm_htc_gesture_switch_proc_write,
+};
+#endif
+
+int32_t nvt_xm_htc_set_fod_enable(int16_t fod_enable)
+{
+	int32_t ret = 0;
+
+	NVT_LOG("++, set fod_enable: %d\n", fod_enable);
+	ret = nvt_set_extend_custom_cmd(0x1A, fod_enable);
+	if (ret < 0)
+		NVT_ERR("nvt_set_extend_custom_cmd fail! ret=%d\n", ret);
+	NVT_LOG("--\n");
+
+	return ret;
+}
+
+int32_t nvt_xm_htc_get_fod_enable(int16_t *fod_enable)
+{
+	int32_t ret = 0;
+
+	NVT_LOG("++\n");
+
+	ret = nvt_get_extend_custom_cmd(0x1A, fod_enable);
+	if (ret < 0) {
+		NVT_ERR("nvt_get_extend_custom_cmd fail! ret=%d\n", ret);
+		goto out;
+	}
+	NVT_LOG("get fod_enable: %d\n", *fod_enable);
+
+out:
+	NVT_LOG("--\n");
+	return ret;
+}
+
+static ssize_t xm_htc_fod_enable_proc_read(struct file *filp, char __user *buf,
+					   size_t count, loff_t *f_pos)
+{
+	static int finished = 0;
+	int32_t cnt = 0;
+	int32_t len = 0;
+	int16_t fod_enable;
+	char tmp_buf[64];
+
+	NVT_LOG("++\n");
+
+	if (finished) {
+		NVT_LOG("read END\n");
+		finished = 0;
+		return 0;
+	}
+	finished = 1;
+
+	if (mutex_lock_interruptible(&ts->lock)) {
+		return -ERESTARTSYS;
+	}
+
+#if NVT_TOUCH_ESD_PROTECT
+	nvt_esd_check_enable(false);
+#endif /* #if NVT_TOUCH_ESD_PROTECT */
+
+	nvt_xm_htc_get_fod_enable(&fod_enable);
+
+	mutex_unlock(&ts->lock);
+
+	cnt = snprintf(tmp_buf, sizeof(tmp_buf), "fod_enable: %d\n",
+		       fod_enable);
+	if (copy_to_user(buf, tmp_buf, sizeof(tmp_buf))) {
+		NVT_ERR("copy_to_user() error!\n");
+		return -EFAULT;
+	}
+	buf += cnt;
+	len += cnt;
+
+	NVT_LOG("--\n");
+	return len;
+}
+
+static ssize_t xm_htc_fod_enable_proc_write(struct file *filp,
+					    const char __user *buf,
+					    size_t count, loff_t *f_pos)
+{
+	int32_t ret;
+	int32_t tmp;
+	int16_t fod_enable;
+	char *tmp_buf = NULL;
+
+	NVT_LOG("++\n");
+
+	if (count == 0 || count > 2) {
+		NVT_ERR("Invalid value! count = %zu\n", count);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	tmp_buf = kzalloc(count + 1, GFP_KERNEL);
+	if (!tmp_buf) {
+		NVT_ERR("Allocate tmp_buf fail!\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+	if (copy_from_user(tmp_buf, buf, count)) {
+		NVT_ERR("copy_from_user() error!\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	ret = sscanf(tmp_buf, "%d", &tmp);
+	if (ret != 1) {
+		NVT_ERR("Invalid value! ret = %d\n", ret);
+		ret = -EINVAL;
+		goto out;
+	}
+	fod_enable = (int16_t)tmp;
+	NVT_LOG("fod_enable = %d\n", fod_enable);
+
+	if (mutex_lock_interruptible(&ts->lock)) {
+		ret = -ERESTARTSYS;
+		goto out;
+	}
+
+#if NVT_TOUCH_ESD_PROTECT
+	nvt_esd_check_enable(false);
+#endif /* #if NVT_TOUCH_ESD_PROTECT */
+
+	nvt_xm_htc_set_fod_enable(fod_enable);
+
+	mutex_unlock(&ts->lock);
+
+	ret = count;
+out:
+	if (tmp_buf)
+		kfree(tmp_buf);
+	NVT_LOG("--\n");
+	return ret;
+}
+
+#ifdef HAVE_PROC_OPS
+static const struct proc_ops xm_htc_fod_enable_fops = {
+	.proc_read = xm_htc_fod_enable_proc_read,
+	.proc_write = xm_htc_fod_enable_proc_write,
+};
+#else
+static const struct file_operations xm_htc_fod_enable_fops = {
+	.owner = THIS_MODULE,
+	.read = xm_htc_fod_enable_proc_read,
+	.write = xm_htc_fod_enable_proc_write,
 };
 #endif
 
@@ -4316,6 +4464,15 @@ int32_t nvt_extra_proc_init(void)
 		NVT_LOG("create proc/%s Succeeded!\n", XM_HTC_GESTURE_SWITCH);
 	}
 
+	XM_HTC_proc_fod_enable_entry = proc_create(
+		XM_HTC_FOD_ENABLE, 0666, NULL, &xm_htc_fod_enable_fops);
+	if (XM_HTC_proc_fod_enable_entry == NULL) {
+		NVT_ERR("create proc/%s Failed!\n", XM_HTC_FOD_ENABLE);
+		return -ENOMEM;
+	} else {
+		NVT_LOG("create proc/%s Succeeded!\n", XM_HTC_FOD_ENABLE);
+	}
+
 	XM_HTC_proc_sw_reset_entry =
 		proc_create(XM_HTC_SW_RESET, 0666, NULL, &xm_htc_sw_reset_fops);
 	if (XM_HTC_proc_sw_reset_entry == NULL) {
@@ -4561,6 +4718,12 @@ void nvt_extra_proc_deinit(void)
 		remove_proc_entry(XM_HTC_GESTURE_SWITCH, NULL);
 		XM_HTC_proc_gesture_switch_entry = NULL;
 		NVT_LOG("Removed /proc/%s\n", XM_HTC_GESTURE_SWITCH);
+	}
+
+	if (XM_HTC_proc_fod_enable_entry != NULL) {
+		remove_proc_entry(XM_HTC_FOD_ENABLE, NULL);
+		XM_HTC_proc_fod_enable_entry = NULL;
+		NVT_LOG("Removed /proc/%s\n", XM_HTC_FOD_ENABLE);
 	}
 
 	if (XM_HTC_proc_sw_reset_entry != NULL) {

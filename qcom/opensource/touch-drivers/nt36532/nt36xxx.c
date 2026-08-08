@@ -1777,6 +1777,43 @@ static void nvt_flash_proc_deinit(void)
 /* function page definition */
 #define FUNCPAGE_GESTURE 1
 
+#define GESTURE_FOD 30
+#define FOD_DOWN 1
+#define FOD_UP 2
+#define TOUCH_FOD_ID 9
+
+#define GESTURE_CMD_DOUBLE_TAP 0x01
+#define GESTURE_CMD_SINGLE_TAP 0x02
+#define GESTURE_CMD_FOD 0x04
+
+extern int update_fod_press_status(int value);
+
+void nvt_ts_fod_down_report(uint16_t fod_x, uint16_t fod_y)
+{
+	update_fod_press_status(1);
+	ts->fod_finger = true;
+	input_mt_slot(ts->input_dev, TOUCH_FOD_ID);
+	input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 1);
+	input_report_key(ts->input_dev, BTN_TOUCH, 1);
+	input_report_key(ts->input_dev, BTN_INFO, 1);
+	input_report_key(ts->input_dev, BTN_TOOL_FINGER, 1);
+	input_report_abs(ts->input_dev, ABS_MT_POSITION_X, fod_x);
+	input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, fod_y);
+	input_sync(ts->input_dev);
+}
+
+void nvt_ts_fod_up_report(void)
+{
+	input_mt_slot(ts->input_dev, TOUCH_FOD_ID);
+	input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+	input_report_key(ts->input_dev, BTN_TOUCH, 0);
+	input_report_key(ts->input_dev, BTN_INFO, 0);
+	input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
+	input_sync(ts->input_dev);
+	update_fod_press_status(0);
+	ts->fod_finger = false;
+}
+
 /*******************************************************
 Description:
 	Novatek touchscreen wake up gesture key report function.
@@ -1860,13 +1897,52 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 		break;
 	case GESTURE_SINGLE_CLICK:
 		NVT_LOG("Gesture : Finger Single Click.\n");
-		if (ts->gesture_command & 0x04) {
+		if (ts->gesture_command & GESTURE_CMD_SINGLE_TAP) {
 			keycode = gesture_key_array[13];
 		} else {
 			NVT_LOG("Gesture : Finger Single Click Not Enable.\n");
 			keycode = 0;
 		}
 		break;
+	case GESTURE_FOD: {
+		uint8_t fod_status;
+		uint16_t input_x, input_y;
+
+		if (driver_get_touch_mode(TOUCH_ID, Touch_Nonui_Mode) == 2) {
+			NVT_LOG("Gesture : FOD ignored, nonui mode\n");
+			break;
+		}
+		fod_status = data[4];
+		if (fod_status != FOD_DOWN && fod_status != FOD_UP)
+			break;
+		input_x = (uint16_t)((data[5] << 8) | data[6]);
+		input_y = (uint16_t)((data[7] << 8) | data[8]);
+		NVT_LOG("get FOD event, fod_status=%d, display_suspend_ready=%d\n",
+			fod_status, ts->display_suspend_ready);
+		if (!(ts->gesture_command & GESTURE_CMD_FOD)) {
+			NVT_LOG("Gesture : FOD Not Enable.\n");
+			break;
+		}
+		if (!ts->display_suspend_ready) {
+			NVT_LOG("Gesture : FOD ignored, display not suspend ready\n");
+			break;
+		}
+		if (fod_status == FOD_UP) {
+			if (ts->fod_finger) {
+				NVT_LOG("Gesture : FOD Up, fod_id:%d\n",
+					TOUCH_FOD_ID);
+				nvt_ts_fod_up_report();
+			}
+		} else {
+			if (!ts->fod_finger)
+				NVT_LOG("Gesture : FOD Down, x=%d, y=%d\n",
+					input_x, input_y);
+			nvt_ts_fod_down_report(
+				input_x * SUPER_RESOLUTION_FACOTR,
+				input_y * SUPER_RESOLUTION_FACOTR);
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -2558,7 +2634,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	ktime_get_real_ts64(&time);
 	memcpy(tp_frame->tp_raw, frame_data_packet, ts->frame_len);
 	tp_frame->time_ns = timespec64_to_ns(&time);
-	tp_frame->fod_pressed = 0;
+	tp_frame->fod_pressed = ts->fod_finger;
 	tp_frame->fod_trackingId = 0;
 	tp_frame->frame_cnt = thp_cnt++;
 	notify_raw_data_update(0);
@@ -3046,9 +3122,49 @@ static void nvt_ic_switch_mode(u8 gesture_type)
 {
 	int gesture_command = 0;
 	if (gesture_type & GESTURE_DOUBLETAP_EVENT)
-		gesture_command |= 0x01;
+		gesture_command |= GESTURE_CMD_DOUBLE_TAP;
+	if (gesture_type & GESTURE_SINGLETAP_EVENT)
+		gesture_command |= GESTURE_CMD_SINGLE_TAP;
+	if (gesture_type & GESTURE_LONGPRESS_EVENT)
+		gesture_command |= GESTURE_CMD_FOD;
 	nvt_set_gesture_mode(gesture_command);
 }
+
+static void nvt_display_suspend_ready(void)
+{
+	if (!ts)
+		return;
+	NVT_LOG("display suspend ready\n");
+	ts->display_suspend_ready = true;
+}
+
+#ifdef TOUCH_FOD_SUPPORT
+static void nvt_xiaomi_touch_fod_test(int value)
+{
+	NVT_LOG("fod test value = %d\n", value);
+	if (value) {
+		update_fod_press_status(1);
+		input_mt_slot(ts->input_dev, 0);
+		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 1);
+		input_report_key(ts->input_dev, BTN_TOUCH, 1);
+		input_report_key(ts->input_dev, BTN_TOOL_FINGER, 1);
+		input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, 0);
+		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 1);
+		input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, 1);
+		input_report_abs(ts->input_dev, ABS_MT_POSITION_X, 64000);
+		input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, 251800);
+		input_sync(ts->input_dev);
+	} else {
+		input_mt_slot(ts->input_dev, 0);
+		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0);
+		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+		input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, -1);
+		input_sync(ts->input_dev);
+		update_fod_press_status(0);
+	}
+}
+#endif /* TOUCH_FOD_SUPPORT */
 
 /* THP scheme this function will not be called */
 static void nvt_cmd_mode_update(long mode_update_flag,
@@ -3091,6 +3207,23 @@ static void nvt_set_cur_value(int mode, int *value)
 		return;
 	}
 
+	if (nvt_mode == Touch_Fod_Setting && ts && nvt_value >= 0) {
+		if (nvt_value != ts->fod_setting) {
+			NVT_LOG("fod setting changed from %d to %d\n",
+				ts->fod_setting, nvt_value);
+			ts->fod_setting = nvt_value;
+		}
+		return;
+	}
+
+	if (nvt_mode == THP_FOD_DOWNUP_CTL && ts && nvt_value >= 0) {
+		NVT_LOG("thp fod %s\n", nvt_value ? "down" : "up");
+		ts->fod_finger = !!nvt_value;
+		input_report_key(ts->input_dev, BTN_INFO, !!nvt_value);
+		input_sync(ts->input_dev);
+		update_fod_press_status(!!nvt_value);
+		return;
+	}
 
 	if (nvt_mode == Touch_Expert_Mode) {
 		NVT_LOG("This is Expert Mode, mode is %d", nvt_value);
@@ -3839,6 +3972,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	ts->input_dev->evbit[0] = BIT_MASK(EV_SYN) | BIT_MASK(EV_KEY) |
 				  BIT_MASK(EV_ABS);
 	ts->input_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
+	ts->input_dev->keybit[BIT_WORD(BTN_INFO)] |= BIT_MASK(BTN_INFO);
 	ts->input_dev->keybit[BIT_WORD(BTN_TOOL_FINGER)] |=
 		BIT_MASK(BTN_TOOL_FINGER);
 	ts->input_dev->propbit[0] = BIT(INPUT_PROP_DIRECT);
@@ -4121,6 +4255,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	hardware_operation.touch_vendor_read = nvt_touch_vendor_read;
 	hardware_operation.get_touch_ic_buffer = NULL;
 	hardware_operation.touch_doze_analysis = nvt_touch_doze_analysis;
+	hardware_operation.display_suspend_ready = nvt_display_suspend_ready;
+#ifdef TOUCH_FOD_SUPPORT
+	hardware_operation.xiaomi_touch_fod_test = nvt_xiaomi_touch_fod_test;
+#endif
 #if TOUCH_THP_SUPPORT
 	hardware_operation.enable_touch_raw = nvt_enable_touch_raw;
 	hardware_operation.htc_ic_setModeValue = nvt_htc_ic_setModeValue;
@@ -4397,11 +4535,20 @@ static int32_t nvt_ts_suspend(struct device *dev)
 		return 0;
 	}
 
-	NVT_LOG("start, gesture_command:0x%02x\n", ts->gesture_command);
+	NVT_LOG("start, gesture_command:0x%02x, fod_finger: %d\n",
+		ts->gesture_command, ts->fod_finger);
 	pm_stay_awake(dev);
 	ts->ic_state = NVT_IC_SUSPEND_IN;
 
 	/* gesture mode setup */
+	if (!(ts->gesture_command & GESTURE_CMD_FOD) && ts->fod_setting == 5) {
+		ts->gesture_command |= GESTURE_CMD_FOD;
+		if (driver_get_touch_mode(TOUCH_ID, Touch_FodIcon_Enable))
+			ts->gesture_command |= GESTURE_CMD_SINGLE_TAP;
+		NVT_LOG("enable fod, gesture_command switch to:0x%02x\n",
+			ts->gesture_command);
+		dsi_panel_gesture_enable(!!ts->gesture_command);
+	}
 	if (!ts->gesture_command)
 		nvt_irq_enable(false);
 	/* gesture mode setup end */
@@ -4425,6 +4572,12 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	msleep(50);
 
 	mutex_unlock(&ts->lock);
+
+	if (ts->fod_finger) {
+		ts->fod_finger = false;
+		update_fod_press_status(0);
+		NVT_LOG("fod up for suspend.\n");
+	}
 
 #if TOUCH_THP_SUPPORT
 	if (ts->enable_touch_raw)
@@ -4537,6 +4690,8 @@ static int32_t nvt_ts_resume(struct device *dev)
 		ts->gesture_command_delayed = -1;
 	}
 #endif /* #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE */
+
+	ts->display_suspend_ready = false;
 
 	if (pm_wake_status)
 		pm_relax(dev);
