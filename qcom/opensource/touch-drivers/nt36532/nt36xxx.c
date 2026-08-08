@@ -2953,6 +2953,24 @@ static void nvt_set_gesture_mode(int value)
 	}
 
 	if (ts->ic_state <= NVT_IC_RESUME_IN && ts->ic_state != NVT_IC_INIT) {
+		if ((value & GESTURE_CMD_FOD) !=
+		    (ts->gesture_command & GESTURE_CMD_FOD)) {
+			NVT_LOG("Screen off, applying FOD gesture flag(%02x) now, ic state is %d",
+				value, ts->ic_state);
+			mutex_lock(&ts->lock);
+			if (value & GESTURE_CMD_FOD) {
+				nvt_irq_enable(true);
+				nvt_xm_htc_set_fod_enable(1);
+				ts->gesture_command |= GESTURE_CMD_FOD;
+			} else {
+				nvt_xm_htc_set_fod_enable(0);
+				ts->gesture_command &= ~GESTURE_CMD_FOD;
+				if (!ts->gesture_command)
+					nvt_irq_enable(false);
+			}
+			dsi_panel_gesture_enable(!!ts->gesture_command);
+			mutex_unlock(&ts->lock);
+		}
 		ts->gesture_command_delayed = value;
 		NVT_LOG("Screen off, don't set gesture flag(%02x), ic state is %d",
 			value, ts->ic_state);

@@ -505,6 +505,7 @@ void nvt_fw_reload_recovery(void);
 int32_t nvt_get_xm_htc_poll_info(void);
 int32_t nvt_xm_htc_set_idle_wake_th(int16_t idle_wake_th);
 int32_t nvt_xm_htc_set_gesture_switch(int16_t gesture_switch);
+int32_t nvt_xm_htc_set_fod_enable(int16_t fod_enable);
 int32_t nvt_xm_htc_set_idle_high_base_en(int16_t idle_high_base_en);
 int32_t nvt_load_mp_setting_criteria_from_csv(void);
 #endif /* #if TOUCH_THP_SUPPORT */
