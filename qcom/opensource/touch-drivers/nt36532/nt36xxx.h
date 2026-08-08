@@ -296,8 +296,6 @@ struct nvt_ts_data {
 	int ic_state;
 	int gesture_command;
 	int gesture_command_delayed;
-	bool gesture_state;
-	bool fod_finger;
 	bool dev_pm_suspend;
 	struct completion dev_pm_suspend_completion;
 	/* gesture mode setup end */

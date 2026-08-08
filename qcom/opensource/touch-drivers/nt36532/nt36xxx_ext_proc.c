@@ -1357,19 +1357,6 @@ out:
 	return ret;
 }
 
-int32_t nvt_xm_htc_set_fod_enable(int16_t fod_enable)
-{
-	int32_t ret = 0;
-
-	NVT_LOG("++, set fod_enable: %d\n", fod_enable);
-	ret = nvt_set_extend_custom_cmd(0x1A, fod_enable);
-	if (ret < 0)
-		NVT_ERR("nvt_set_extend_custom_cmd fail! ret=%d\n", ret);
-	NVT_LOG("--\n");
-
-	return ret;
-}
-
 int32_t nvt_xm_htc_get_gesture_switch(int16_t *gesture_switch)
 {
 	int32_t ret = 0;
