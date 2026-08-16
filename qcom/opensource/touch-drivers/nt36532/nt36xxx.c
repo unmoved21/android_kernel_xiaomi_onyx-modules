@@ -4580,11 +4580,7 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	mutex_lock(&ts->lock);
 
 	/* gesture mode setup */
-	if (ts->gesture_command) {
-		nvt_enable_gesture_mode(true);
-	} else {
-		nvt_enable_gesture_mode(false);
-	}
+	nvt_enable_gesture_mode(true);
 	/* gesture mode setup end */
 
 	msleep(50);
