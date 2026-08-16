@@ -32,6 +32,7 @@ static DEFINE_MUTEX(stylus_connect_status_mutex);
 #ifdef TOUCH_FOD_SUPPORT
 static DEFINE_MUTEX(fod_press_status_mutex);
 #endif
+static DEFINE_MUTEX(gesture_double_tap_mutex);
 static DEFINE_MUTEX(abnormal_event_mutex);
 static DEFINE_MUTEX(palm_mutex);
 
@@ -158,6 +159,18 @@ int update_fod_press_status(int value)
 EXPORT_SYMBOL_GPL(update_fod_press_status);
 #endif // TOUCH_FOD_SUPPORT
 
+int notify_gesture_double_tap(void)
+{
+	mutex_lock(&gesture_double_tap_mutex);
+	if (xiaomi_touch_dev)
+		sysfs_notify(&xiaomi_touch_dev->kobj, NULL,
+			     "gesture_double_tap_state");
+	mutex_unlock(&gesture_double_tap_mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(notify_gesture_double_tap);
+
 int update_palm_sensor_value(int value)
 {
 	mutex_lock(&palm_mutex);
@@ -218,6 +231,35 @@ CREATE_ATTR(
 		return count;
 	});
 #endif
+
+CREATE_ATTR(
+	gesture_double_tap_enabled,
+	{
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				driver_get_touch_mode(TOUCH_ID,
+						      Touch_Doubletap_Mode));
+	},
+	{
+		unsigned int input;
+		int mode_arr[Touch_Mode_NUM] = { 0 };
+
+		if (sscanf(buf, "%d", &input) < 0 || input > 1)
+			return -EINVAL;
+
+		if (driver_get_touch_mode(TOUCH_ID,
+					  Touch_Doubletap_Mode) != input)
+			sysfs_notify(&xiaomi_touch_dev->kobj, NULL,
+				     "gesture_double_tap_enabled");
+
+		mode_arr[Touch_Doubletap_Mode] = input;
+		driver_update_touch_mode(TOUCH_ID, mode_arr,
+					 1L << Touch_Doubletap_Mode);
+		return count;
+	});
+
+CREATE_ATTR(gesture_double_tap_state,
+	    { return snprintf(buf, PAGE_SIZE, "%d\n", 1); },
+	    { return count; });
 
 CREATE_ATTR(
 	panel_vendor,
@@ -744,6 +786,8 @@ static struct attribute *touch_attr_group[] = {
 	&dev_attr_fod_longpress_gesture_enabled.attr,
 	&dev_attr_fod_test.attr,
 #endif
+	&dev_attr_gesture_double_tap_enabled.attr,
+	&dev_attr_gesture_double_tap_state.attr,
 #ifdef TOUCH_STYLUS_SUPPORT
 	&dev_attr_pen_connect_strategy.attr,
 #endif

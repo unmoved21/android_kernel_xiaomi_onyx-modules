@@ -378,6 +378,7 @@ int update_stylus_connect_status_value(int value);
 #ifdef TOUCH_FOD_SUPPORT
 int update_fod_press_status(int value);
 #endif
+int notify_gesture_double_tap(void);
 struct class *get_xiaomi_touch_class(void);
 int update_palm_sensor_value(int value);
 void *get_raw_data_base(s8 touch_id);
