@@ -987,7 +987,9 @@ download_fail:
 request_firmware_fail:
 #if TOUCH_THP_SUPPORT
 	ts->xm_htc_sw_reset = false;
-	if (ret == 0 && ts->enable_touch_raw) {
+	if (ret == 0 && ts->enable_touch_raw &&
+	    ts->ic_state != NVT_IC_SUSPEND_IN &&
+	    ts->ic_state != NVT_IC_SUSPEND_OUT) {
 		extern int32_t nvt_xm_htc_set_op_mode(int16_t op_mode);
 		extern int32_t nvt_xm_htc_set_report_rate(int16_t report_rate);
 		nvt_xm_htc_set_op_mode(2);
