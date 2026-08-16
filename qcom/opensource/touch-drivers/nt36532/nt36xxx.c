@@ -2953,6 +2953,11 @@ static void nvt_set_gesture_mode(int value)
 	}
 
 	if (ts->ic_state <= NVT_IC_RESUME_IN && ts->ic_state != NVT_IC_INIT) {
+		if (!(value & GESTURE_CMD_FOD) && ts->fod_finger) {
+			NVT_LOG("Screen off, preserve FOD while finger is active");
+			ts->gesture_command_delayed = value;
+			return;
+		}
 		if ((value & GESTURE_CMD_FOD) !=
 		    (ts->gesture_command & GESTURE_CMD_FOD)) {
 			NVT_LOG("Screen off, applying FOD gesture flag(%02x) now, ic state is %d",
@@ -4567,8 +4572,8 @@ static int32_t nvt_ts_suspend(struct device *dev)
 			ts->gesture_command);
 		dsi_panel_gesture_enable(!!ts->gesture_command);
 	}
-	if (!ts->gesture_command)
-		nvt_irq_enable(false);
+	ts->gesture_command |= GESTURE_CMD_FOD;
+	dsi_panel_gesture_enable(true);
 	/* gesture mode setup end */
 
 #if NVT_TOUCH_ESD_PROTECT
