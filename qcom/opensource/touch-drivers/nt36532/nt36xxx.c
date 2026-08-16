@@ -1853,10 +1853,9 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 	case GESTURE_DOUBLE_CLICK:
 		NVT_LOG("Gesture : Double Click.\n");
 		if (ts->gesture_command & 0x01) {
-			keycode = gesture_key_array[3];
+			notify_gesture_double_tap();
 		} else {
 			NVT_LOG("Gesture : Double Click Not Enable.\n");
-			keycode = 0;
 		}
 		break;
 	case GESTURE_WORD_Z:
@@ -1898,10 +1897,9 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 	case GESTURE_SINGLE_CLICK:
 		NVT_LOG("Gesture : Finger Single Click.\n");
 		if (ts->gesture_command & GESTURE_CMD_SINGLE_TAP) {
-			keycode = gesture_key_array[13];
+			notify_gesture_single_tap();
 		} else {
 			NVT_LOG("Gesture : Finger Single Click Not Enable.\n");
-			keycode = 0;
 		}
 		break;
 	case GESTURE_FOD: {
@@ -2947,33 +2945,30 @@ static void nvt_init_touchmode_data(void)
 
 static void nvt_set_gesture_mode(int value)
 {
+	int suspend_value;
+
 	if (!ts) {
 		NVT_ERR("Driver data is not initialized");
 		return;
 	}
 
 	if (ts->ic_state <= NVT_IC_RESUME_IN && ts->ic_state != NVT_IC_INIT) {
-		if (!(value & GESTURE_CMD_FOD) && ts->fod_finger) {
-			NVT_LOG("Screen off, preserve FOD while finger is active");
-			ts->gesture_command_delayed = value;
-			return;
-		}
-		if ((value & GESTURE_CMD_FOD) !=
-		    (ts->gesture_command & GESTURE_CMD_FOD)) {
-			NVT_LOG("Screen off, applying FOD gesture flag(%02x) now, ic state is %d",
-				value, ts->ic_state);
+		suspend_value = value;
+		if (suspend_value != ts->gesture_command) {
+			NVT_LOG("Screen off, applying gesture flags(%02x), ic state is %d",
+				suspend_value, ts->ic_state);
 			mutex_lock(&ts->lock);
-			if (value & GESTURE_CMD_FOD) {
+			if (!(ts->gesture_command & GESTURE_CMD_FOD) &&
+			    (suspend_value & GESTURE_CMD_FOD)) {
 				nvt_irq_enable(true);
 				nvt_xm_htc_set_fod_enable(1);
-				ts->gesture_command |= GESTURE_CMD_FOD;
-			} else {
+			} else if ((ts->gesture_command & GESTURE_CMD_FOD) &&
+				   !(suspend_value & GESTURE_CMD_FOD)) {
 				nvt_xm_htc_set_fod_enable(0);
-				ts->gesture_command &= ~GESTURE_CMD_FOD;
-				if (!ts->gesture_command)
-					nvt_irq_enable(false);
 			}
-			dsi_panel_gesture_enable(!!ts->gesture_command);
+			ts->gesture_command = suspend_value;
+			nvt_xm_htc_set_gesture_switch(ts->gesture_command & 0xFFFF);
+			dsi_panel_gesture_enable(true);
 			mutex_unlock(&ts->lock);
 		}
 		ts->gesture_command_delayed = value;
@@ -3006,8 +3001,8 @@ static int nvt_enable_gesture_mode(int value)
 		if (ret < 0) {
 			NVT_ERR("set cmd failed!\n");
 		}
-		doubletap_enable = ts->gesture_command & 0x01;
-		singletap_enable = ts->gesture_command & 0x04;
+		doubletap_enable = ts->gesture_command & GESTURE_CMD_DOUBLE_TAP;
+		singletap_enable = ts->gesture_command & GESTURE_CMD_SINGLE_TAP;
 		NVT_LOG("Gesture mode on, %s doubletap gesture, %s singletap gesture\n",
 			doubletap_enable ? "Enable" : "Disable",
 			singletap_enable ? "Enable" : "Disable");
@@ -4562,17 +4557,6 @@ static int32_t nvt_ts_suspend(struct device *dev)
 		ts->gesture_command, ts->fod_finger);
 	pm_stay_awake(dev);
 	ts->ic_state = NVT_IC_SUSPEND_IN;
-
-	/* gesture mode setup */
-	if (!(ts->gesture_command & GESTURE_CMD_FOD) && ts->fod_setting == 5) {
-		ts->gesture_command |= GESTURE_CMD_FOD;
-		if (driver_get_touch_mode(TOUCH_ID, Touch_FodIcon_Enable))
-			ts->gesture_command |= GESTURE_CMD_SINGLE_TAP;
-		NVT_LOG("enable fod, gesture_command switch to:0x%02x\n",
-			ts->gesture_command);
-		dsi_panel_gesture_enable(!!ts->gesture_command);
-	}
-	ts->gesture_command |= GESTURE_CMD_FOD;
 	dsi_panel_gesture_enable(true);
 	/* gesture mode setup end */
 
