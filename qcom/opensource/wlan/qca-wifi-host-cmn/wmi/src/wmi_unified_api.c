@@ -1,20 +1,7 @@
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
- * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
- * AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
- * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
- * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
- * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
- * PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include "wmi_unified_priv.h"
@@ -4328,5 +4315,70 @@ void *wmi_extract_cached_scan_report_ev_params(wmi_unified_t wmi_handle,
 									     ev_data,
 									     data_len);
 	return NULL;
+}
+#endif
+
+#ifdef DRIVER_PASSTHRU_MODE
+QDF_STATUS
+wmi_unified_send_vdev_ch_hop_sched_cmd(wmi_unified_t wmi_handle,
+				       struct vdev_ch_hop_sched_params *params)
+{
+	if (wmi_handle->ops->send_vdev_ch_hop_sched_cmd)
+		return wmi_handle->ops->send_vdev_ch_hop_sched_cmd(wmi_handle,
+								   params);
+
+	return QDF_STATUS_E_FAILURE;
+}
+#endif
+
+#if defined(DRIVER_PASSTHRU_MODE) || defined(WLAN_FEATURE_DSRC)
+QDF_STATUS wmi_unified_ocb_get_tsf_timer(struct wmi_unified *wmi_hdl,
+					 struct ocb_get_tsf_timer_param *req)
+{
+	if (wmi_hdl->ops->send_ocb_get_tsf_timer_cmd)
+		return wmi_hdl->ops->send_ocb_get_tsf_timer_cmd(wmi_hdl,
+								req->vdev_id);
+
+	return QDF_STATUS_E_FAILURE;
+}
+#endif
+
+#ifdef DRIVER_PASSTHRU_MODE
+QDF_STATUS wmi_unified_vdev_get_chan_hop_status(
+	struct wmi_unified *wmi_handle,
+	struct vdev_chan_hop_status_req *req)
+{
+	if (!wmi_handle || !req) {
+		wmi_err("Invalid parameters");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (wmi_handle->ops->send_vdev_get_chan_hop_status_cmd)
+		return wmi_handle->ops->send_vdev_get_chan_hop_status_cmd(
+								wmi_handle,
+								req->vdev_id);
+
+	wmi_err("send_vdev_get_chan_hop_status_cmd not registered");
+	return QDF_STATUS_E_FAILURE;
+}
+
+QDF_STATUS wmi_extract_vdev_chan_hop_status(
+	struct wmi_unified *wmi_handle,
+	void *evt_buf,
+	struct vdev_chan_hop_status_response *resp)
+{
+	if (!wmi_handle || !evt_buf || !resp) {
+		wmi_err("Invalid parameters");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (wmi_handle->ops->extract_vdev_chan_hop_status)
+		return wmi_handle->ops->extract_vdev_chan_hop_status(
+							wmi_handle,
+							evt_buf,
+							resp);
+
+	wmi_err("extract_vdev_chan_hop_status not registered");
+	return QDF_STATUS_E_FAILURE;
 }
 #endif
