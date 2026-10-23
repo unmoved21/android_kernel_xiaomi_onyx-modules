@@ -166,6 +166,13 @@ struct syna_hw_interface {
 	/* Implementation of hardware reset operation */
 	void (*ops_hw_reset)(void);
 
+	/* Set reset GPIO direction for sleep state management:
+	 * true  = input  (sleep/suspend state, reduces leakage current)
+	 * false = output (active state, holds reset line)
+	 * Called only from suspend/resume paths, never from shutdown.
+	 */
+	int (*ops_set_reset_gpio_input)(bool input);
+
 #if defined(CONFIG_TOUCHSCREEN_SYNA_TCM2_DEBUG_MSG)
 	int debug_trace;
 #endif

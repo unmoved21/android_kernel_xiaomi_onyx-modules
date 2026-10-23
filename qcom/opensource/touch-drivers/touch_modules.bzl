@@ -57,6 +57,26 @@ module_entry(
     deps = ["qts"],
 )
 
+#define ddk_module() for goodix_ts2
+module_entry(
+    name = "goodix_ts2",
+    config_option = "CONFIG_TOUCHSCREEN_GOODIX_BRL2",
+    srcs = [
+            "goodix_berlin_driver2/goodix_brl_fwupdate.c",
+            "goodix_berlin_driver2/goodix_brl_hw.c",
+            "goodix_berlin_driver2/goodix_brl_i2c.c",
+            "goodix_berlin_driver2/goodix_brl_spi.c",
+            "goodix_berlin_driver2/goodix_cfg_bin.c",
+            "goodix_berlin_driver2/goodix_ts_core.c",
+            "goodix_berlin_driver2/goodix_ts_dump.c",
+            "goodix_berlin_driver2/goodix_ts_gesture.c",
+            "goodix_berlin_driver2/goodix_ts_inspect.c",
+            "goodix_berlin_driver2/goodix_ts_replay.c",
+            "goodix_berlin_driver2/goodix_ts_tools.c",
+            "goodix_berlin_driver2/goodix_ts_utils.c"
+    ],
+    deps = ["qts"],
+)
 #define ddk_module() for nt36xxx
 module_entry(
     name = "nt36xxx-i2c",
@@ -214,4 +234,17 @@ module_entry(
     deps = [
 	    "glink_comm"
     ]
+)
+
+#define ddk_module() for gt9xx-ts
+module_entry(
+    name = "gt9xx-ts",
+    config_option = "CONFIG_TOUCHSCREEN_GT9XX",
+
+    srcs = [
+            "gt9xx/gt9xx.c",
+            "gt9xx/gt9xx_update.c",
+            "gt9xx/goodix_tool.c"
+    ],
+    deps = ["qts"],
 )

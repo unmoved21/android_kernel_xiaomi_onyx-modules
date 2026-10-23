@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2010 - 2018 Novatek, Inc.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * $Revision: 47247 $
  * $Date: 2019-07-10 10:41:36 +0800 (Wed, 10 Jul 2019) $
@@ -1001,6 +1001,10 @@ void Boot_Update_Firmware(struct work_struct *work)
 	snprintf(firmware_name, sizeof(firmware_name),
 			BOOT_UPDATE_FIRMWARE_NAME);
 
+	if (ts->nvt_pid == 0x5B0B) {
+		NVT_ERR("Skip Firmware Update\n");
+		return;
+	}
 	// request bin file in "/etc/firmware"
 	ret = update_firmware_request(firmware_name);
 	if (ret) {

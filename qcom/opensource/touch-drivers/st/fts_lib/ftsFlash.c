@@ -3,7 +3,7 @@
  * Copyright (C) 2016-2019, STMicroelectronics Limited.
  * Authors: AMG(Analog Mems Group) <marco.cali@st.com>
  *
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /*
@@ -110,7 +110,11 @@ int getFWdata(struct fts_ts_info *info, const char *pathToFile, u8 **data, int *
 		dev = getDev(info);
 
 		if (dev != NULL) {
+#if (KERNEL_VERSION(3, 13, 0) > LINUX_VERSION_CODE)
 			res = request_firmware(&fw, path, dev);
+#else
+			res = request_firmware_direct(&fw, path, dev);
+#endif
 			if (res == 0) {
 				*size = fw->size;
 				*data = (u8 *)kmalloc((*size) * sizeof(u8),

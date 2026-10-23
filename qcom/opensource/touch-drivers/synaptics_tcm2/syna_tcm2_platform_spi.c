@@ -1025,6 +1025,51 @@ exit:
 	return retval;
 }
 /*
+ * Set the reset GPIO direction for sleep state management.
+ * Called only from suspend/resume paths to avoid accessing pinctrl
+ * hardware during shutdown when it may already be torn down.
+ *
+ * param
+ *    [ in] input: true to set as input (sleep), false to set as output (active)
+ *
+ * return
+ *    0 in case of success, a negative value otherwise.
+ */
+static int syna_spi_set_reset_gpio_input(bool input)
+{
+#ifdef CONFIG_ARCH_QTI_VM
+	/* TVM mode: reset GPIO managed by QTS */
+	return 0;
+#else
+	int retval;
+	struct syna_hw_rst_data *rst;
+
+	if (!p_hw_spi_if)
+		return -EINVAL;
+
+	rst = &p_hw_spi_if->bdata_rst;
+	if (!rst || rst->reset_gpio < 0)
+		return -EINVAL;
+
+	if (input) {
+		retval = gpio_direction_input(rst->reset_gpio);
+		if (retval < 0)
+			LOGE("Fail to set reset GPIO-%d as input\n", rst->reset_gpio);
+		else
+			LOGD("Reset GPIO-%d set as input (sleep)\n", rst->reset_gpio);
+	} else {
+		retval = gpio_direction_output(rst->reset_gpio, 0);
+		if (retval < 0)
+			LOGE("Fail to set reset GPIO-%d as output\n", rst->reset_gpio);
+		else
+			LOGD("Reset GPIO-%d set as output (active)\n", rst->reset_gpio);
+	}
+
+	return retval;
+#endif
+}
+
+/*
  * Toggle the hardware gpio pin to perform the chip reset.
  *
  * param
@@ -1145,18 +1190,19 @@ static int syna_spi_power_on(bool on)
 		retval = syna_spi_power_setup(&pwr->vio, true, pwr->power_on_state);
 		if (retval < 0) {
 			LOGE("Fail to power on VIO\n");
+			syna_spi_power_setup(&pwr->vdd, false, pwr->power_on_state);
 			goto exit;
 		}
 	} else {
 		retval = syna_spi_power_setup(&pwr->vio, false, pwr->power_on_state);
 		if (retval < 0) {
-			LOGE("Fail to power off VDD\n");
+			LOGE("Fail to power off VIO\n");
 			goto exit;
 		}
 
 		retval = syna_spi_power_setup(&pwr->vdd, false, pwr->power_on_state);
 		if (retval < 0) {
-			LOGE("Fail to power off VIO\n");
+			LOGE("Fail to power off VDD\n");
 			goto exit;
 		}
 	}
@@ -1654,6 +1700,7 @@ static int syna_spi_probe(struct spi_device *spi)
 #endif
 	p_hw_spi_if->ops_power_on = syna_spi_power_on;
 	p_hw_spi_if->ops_hw_reset = syna_spi_hw_reset;
+	p_hw_spi_if->ops_set_reset_gpio_input = syna_spi_set_reset_gpio_input;
 
 	spi_set_drvdata(spi, p_hw_spi_if->platform_device);
 

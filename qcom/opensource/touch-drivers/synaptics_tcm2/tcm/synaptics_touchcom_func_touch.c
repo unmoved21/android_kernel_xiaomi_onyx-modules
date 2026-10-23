@@ -752,7 +752,7 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev, unsigned char *report,
 					continue;
 			}
 
-			LOGW("Unknown touch entity:0x%02x (size:%d), skip !\n",
+			LOGD("Unknown touch entity:0x%02x (size:%d), skip !\n",
 				code, config_data[idx]);
 			bits = config_data[idx++];
 			offset += bits;

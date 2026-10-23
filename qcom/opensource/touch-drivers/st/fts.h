@@ -24,7 +24,7 @@
   *
   * THIS SOFTWARE IS SPECIFICALLY DESIGNED FOR EXCLUSIVE USE WITH ST PARTS.
   *
-  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
   */
 
 /*!
@@ -542,6 +542,10 @@ struct fts_ts_info {
 	struct pinctrl *pinctrl;	/* /< pinctrl for level shifter and touch GPIOs */
 	struct pinctrl_state *pins_active;	/* /< active pinctrl state */
 	struct pinctrl_state *pins_suspend;	/* /< suspend pinctrl state */
+#if IS_ENABLED(CONFIG_GUNYAH_CRASH_CLEANER)
+	struct notifier_block crash_cleaner_nb;	/* /< crash cleaner notifier */
+	bool crash_cleaner_registered;	/* /< notifier registration state */
+#endif
 };
 
 enum DUAL_TOUCH_TYPE {

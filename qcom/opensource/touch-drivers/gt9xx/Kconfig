@@ -5,8 +5,10 @@ config TOUCHSCREEN_GT9XX
 	bool "Goodix touchpanel GT9xx series"
 	depends on I2C
 	help
-	  Say Y here if you have a Goodix GT9xx touchscreen
-	  controller.
+          Say Y here if your device uses a Goodix GT9xx series
+          capacitive touchscreen controller connected over I2C.
+          This driver enables basic touch functionality and handles
+          initialization, coordinate reporting and interrupt processing.
 
           If unsure, say N.
 
@@ -15,9 +17,10 @@ config TOUCHSCREEN_GT9XX_UPDATE
 	depends on TOUCHSCREEN_GT9XX
 	default n
 	help
-	  Enable this for support firmware update.
-
-	  Say Y here if you want update touch controller firmware.
+          Enable this option to allow firmware update support for
+          Goodix GT9xx series touch controllers. The driver will load
+          update images and apply them during boot or when triggered,
+          ensuring the controller runs the latest firmware.
 
 	  If unsure, say N.
 

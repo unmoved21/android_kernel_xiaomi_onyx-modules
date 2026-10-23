@@ -1,6 +1,11 @@
 
 KDIR := $(TOP)/kernel_platform/common
 
+ifeq ($(CONFIG_ARCH_SHIKRA), y)
+	include $(TOUCH_ROOT)/config/gki_shikratouch.conf
+	LINUX_INC += -include $(TOUCH_ROOT)/config/gki_shikratouchconf.h
+endif
+
 ifeq ($(CONFIG_ARCH_VIENNA), y)
 	include $(TOUCH_ROOT)/config/gki_viennatouch.conf
 	LINUX_INC += -include $(TOUCH_ROOT)/config/gki_viennatouchconf.h
@@ -161,7 +166,7 @@ ifeq ($(CONFIG_QTS_ENABLE), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/qts/qts_core.h
 	LINUX_INC += -include $(TOUCH_ROOT)/qts/qts_core_common.h
 
-	qts-y := ./qts/qts_core.o
+	qts-y := qts/qts_core.o
 
 	obj-$(CONFIG_MSM_TOUCH) += qts.o
 endif
@@ -204,10 +209,10 @@ ifeq ($(CONFIG_TOUCHSCREEN_NT36XXX_I2C), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/nt36xxx/nt36xxx_mp_ctrlram.h
 
 	nt36xxx-i2c-y := \
-		 ./nt36xxx/nt36xxx.o \
-		 ./nt36xxx/nt36xxx_fw_update.o \
-		 ./nt36xxx/nt36xxx_ext_proc.o \
-		 ./nt36xxx/nt36xxx_mp_ctrlram.o
+		 nt36xxx/nt36xxx.o \
+		 nt36xxx/nt36xxx_fw_update.o \
+		 nt36xxx/nt36xxx_ext_proc.o \
+		 nt36xxx/nt36xxx_mp_ctrlram.o
 
 	obj-$(CONFIG_MSM_TOUCH) += nt36xxx-i2c.o
 endif
@@ -216,18 +221,39 @@ ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/goodix_berlin_driver/goodix_ts_core.h
 
 	goodix_ts-y := \
-		 ./goodix_berlin_driver/goodix_ts_core.o \
-		 ./goodix_berlin_driver/goodix_brl_hw.o \
-		 ./goodix_berlin_driver/goodix_cfg_bin.o \
-		 ./goodix_berlin_driver/goodix_ts_utils.o \
-		 ./goodix_berlin_driver/goodix_brl_fwupdate.o \
-		 ./goodix_berlin_driver/goodix_ts_tools.o \
-		 ./goodix_berlin_driver/goodix_ts_gesture.o \
-		 ./goodix_berlin_driver/goodix_ts_inspect.o \
-		 ./goodix_berlin_driver/goodix_brl_spi.o \
-		 ./goodix_berlin_driver/goodix_brl_i2c.o \
+		 goodix_berlin_driver/goodix_ts_core.o \
+		 goodix_berlin_driver/goodix_brl_hw.o \
+		 goodix_berlin_driver/goodix_cfg_bin.o \
+		 goodix_berlin_driver/goodix_ts_utils.o \
+		 goodix_berlin_driver/goodix_brl_fwupdate.o \
+		 goodix_berlin_driver/goodix_ts_tools.o \
+		 goodix_berlin_driver/goodix_ts_gesture.o \
+		 goodix_berlin_driver/goodix_ts_inspect.o \
+		 goodix_berlin_driver/goodix_brl_spi.o \
+		 goodix_berlin_driver/goodix_brl_i2c.o \
 
 	obj-$(CONFIG_MSM_TOUCH) += goodix_ts.o
+endif
+
+ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL2), y)
+	LINUX_INC += -include $(TOUCH_ROOT)/goodix_berlin_driver2/goodix_ts_core.h
+	LINUX_INC += -include $(TOUCH_ROOT)/goodix_berlin_driver2/goodix_ts_replay_type.h
+
+	goodix_ts2-y := \
+		 goodix_berlin_driver2/goodix_brl_fwupdate.o \
+		 goodix_berlin_driver2/goodix_brl_hw.o \
+		 goodix_berlin_driver2/goodix_brl_i2c.o \
+		 goodix_berlin_driver2/goodix_brl_spi.o \
+		 goodix_berlin_driver2/goodix_cfg_bin.o \
+		 goodix_berlin_driver2/goodix_ts_core.o \
+		 goodix_berlin_driver2/goodix_ts_dump.o \
+		 goodix_berlin_driver2/goodix_ts_gesture.o \
+		 goodix_berlin_driver2/goodix_ts_inspect.o \
+		 goodix_berlin_driver2/goodix_ts_replay.o \
+		 goodix_berlin_driver2/goodix_ts_tools.o \
+		 goodix_berlin_driver2/goodix_ts_utils.o
+
+	obj-$(CONFIG_MSM_TOUCH) += goodix_ts2.o
 endif
 
 ifeq ($(CONFIG_TOUCHSCREEN_ST), y)
@@ -248,17 +274,17 @@ ifeq ($(CONFIG_TOUCHSCREEN_ST), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/st/fts_lib/ftsTool.h
 
 	st_fts-y := \
-		 ./st/fts.o \
-		 ./st/fts_lib/ftsCompensation.o \
-		 ./st/fts_lib/ftsCore.o \
-		 ./st/fts_lib/ftsError.o \
-		 ./st/fts_lib/ftsFlash.o \
-		 ./st/fts_lib/ftsFrame.o \
-		 ./st/fts_lib/ftsGesture.o \
-		 ./st/fts_lib/ftsIO.o \
-		 ./st/fts_lib/ftsTest.o \
-		 ./st/fts_lib/ftsTime.o \
-		 ./st/fts_lib/ftsTool.o
+		 st/fts.o \
+		 st/fts_lib/ftsCompensation.o \
+		 st/fts_lib/ftsCore.o \
+		 st/fts_lib/ftsError.o \
+		 st/fts_lib/ftsFlash.o \
+		 st/fts_lib/ftsFrame.o \
+		 st/fts_lib/ftsGesture.o \
+		 st/fts_lib/ftsIO.o \
+		 st/fts_lib/ftsTest.o \
+		 st/fts_lib/ftsTime.o \
+		 st/fts_lib/ftsTool.o
 
 	obj-$(CONFIG_MSM_TOUCH) += st_fts.o
 endif
@@ -266,7 +292,7 @@ endif
 ifeq ($(CONFIG_TOUCHSCREEN_ATMEL_MXT), y)
 
 	atmel_mxt_ts-y := \
-		 ./atmel_mxt/atmel_mxt_ts.o
+		 atmel_mxt/atmel_mxt_ts.o
 
 	obj-$(CONFIG_MSM_TOUCH) += atmel_mxt_ts.o
 endif
@@ -310,16 +336,16 @@ ifeq ($(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM2), y)
 	LINUX_INC += -include $(TOUCH_ROOT)/synaptics_tcm2/tcm/synaptics_touchcom_image_parsing.h
 	LINUX_INC += -include $(TOUCH_ROOT)/synaptics_tcm2/tcm/synaptics_touchcom_platform.h
 
-	synaptics_tcm_ts-y := \
-		 ./synaptics_tcm2/syna_tcm2.o \
-		 ./synaptics_tcm2/syna_tcm2_platform_spi.o \
-		 ./synaptics_tcm2/syna_tcm2_sysfs.o \
-		 ./synaptics_tcm2/syna_tcm2_cdev.o \
-		 ./synaptics_tcm2/tcm/synaptics_touchcom_func_base.o \
-		 ./synaptics_tcm2/tcm/synaptics_touchcom_func_touch.o\
-		 ./synaptics_tcm2/tcm/synaptics_touchcom_core_v1.o \
-		 ./synaptics_tcm2/tcm/synaptics_touchcom_image_parsing.o \
-		 ./synaptics_tcm2/tcm/synaptics_touchcom_func_reflash.o \
+	synaptics_tcm2_ts-y := \
+		 synaptics_tcm2/syna_tcm2.o \
+		 synaptics_tcm2/syna_tcm2_platform_spi.o \
+		 synaptics_tcm2/syna_tcm2_sysfs.o \
+		 synaptics_tcm2/syna_tcm2_cdev.o \
+		 synaptics_tcm2/tcm/synaptics_touchcom_func_base.o \
+		 synaptics_tcm2/tcm/synaptics_touchcom_func_touch.o\
+		 synaptics_tcm2/tcm/synaptics_touchcom_core_v1.o \
+		 synaptics_tcm2/tcm/synaptics_touchcom_image_parsing.o \
+		 synaptics_tcm2/tcm/synaptics_touchcom_func_reflash.o \
 
 	obj-$(CONFIG_MSM_TOUCH) += synaptics_tcm2_ts.o
 
@@ -386,6 +412,17 @@ ifneq ($(CONFIG_ARCH_PINEAPPLE), y)
 			./raydium/chip_raydium/ic_drv_interface.o
 
 			obj-$(CONFIG_MSM_TOUCH) += raydium_ts.o
+	endif
+
+	ifeq ($(CONFIG_TOUCHSCREEN_GT9XX), y)
+		LINUX_INC += -include $(TOUCH_ROOT)/gt9xx/gt9xx.h
+
+		gt9xx-ts-y := \
+			./gt9xx/gt9xx.o \
+			./gt9xx/gt9xx_update.o
+			./gt9xx/goodix_tool.o
+
+			obj-$(CONFIG_MSM_TOUCH) += gt9xx-ts.o
 	endif
 
 endif # pineapple

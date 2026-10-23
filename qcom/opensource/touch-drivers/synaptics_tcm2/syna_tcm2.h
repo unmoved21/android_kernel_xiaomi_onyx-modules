@@ -41,6 +41,7 @@
 #include "syna_tcm2_platform.h"
 #include "tcm/synaptics_touchcom_core_dev.h"
 #include "tcm/synaptics_touchcom_func_base.h"
+#include <linux/kref.h>
 
 #define PLATFORM_DRIVER_NAME "synaptics_tcm"
 
@@ -90,11 +91,11 @@
 #define RESET_ON_CONNECT
 
 /* Reset the touch controller on system resume */
-/* #define RESET_ON_RESUME */
+#define RESET_ON_RESUME
 
 #if defined(RESET_ON_RESUME)
 /* Use hardware reset on resume */
-/* #define HW_RESET_ON_RESUME */
+#define HW_RESET_ON_RESUME
 #endif
 
 /* Enter low power mode during system suspend */
@@ -331,6 +332,8 @@ struct syna_tcm {
 	/* Panel notifier for power management */
 	void *notifier_cookie;
 #endif
+	struct kref        dev_kref;
+	struct completion  dev_released;
 };
 
 /* Helpers for the character device registration */

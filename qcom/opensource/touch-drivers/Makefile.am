@@ -10,6 +10,10 @@ ifeq ($(TARGET_SUPPORT),genericarmv8)
 	KBUILD_OPTIONS += CONFIG_ARCH_PINEAPPLE=y
 endif
 
+ifeq ($(TARGET_SUPPORT),genericarmv8)
+	KBUILD_OPTIONS += CONFIG_ARCH_SHIKRA=y
+endif
+
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
 

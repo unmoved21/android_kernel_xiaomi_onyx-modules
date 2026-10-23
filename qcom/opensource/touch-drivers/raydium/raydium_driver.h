@@ -371,9 +371,9 @@ struct raydium_ts_data {
 
 #endif /*end of MSM_NEW_VER*/
 	int touch_offload;
-
-
+	bool glink_channel_state;
 };
+
 struct raydium_platform_data {
 	char *vdd_name;
 	int irq_gpio_number;

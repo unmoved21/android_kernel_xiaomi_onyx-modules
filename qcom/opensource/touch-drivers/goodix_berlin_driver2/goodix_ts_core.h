@@ -1,0 +1,852 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Goodix Touchscreen Driver
+ * Copyright (C) 2020 - 2021 Goodix, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be a reference
+ * to you, when you are integrating the GOODiX's CTP IC into your system,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+#ifndef _GOODIX_TS_CORE_H_
+#define _GOODIX_TS_CORE_H_
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/version.h>
+#include <linux/errno.h>
+#include <linux/init.h>
+#include <linux/firmware.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/mutex.h>
+#include <linux/platform_device.h>
+#include <linux/cdev.h>
+#include <linux/input.h>
+#include <linux/interrupt.h>
+#include <linux/completion.h>
+#include <linux/of_irq.h>
+#if IS_ENABLED(CONFIG_OF)
+#include <linux/of_gpio.h>
+#include <linux/regulator/consumer.h>
+#endif
+#ifdef CONFIG_DRM_MEDIATEK
+#include "mtk_disp_notify.h"
+#elif defined(CONFIG_DRM_PANEL_NOTIFY)
+#include <linux/soc/qcom/panel_event_notifier.h>
+#elif defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#endif
+
+#define GOODIX_CORE_DRIVER_NAME "goodix_ts_atb"
+#define GOODIX_PEN_DRIVER_NAME "goodix_ts_atb,pen"
+#define GOODIX_DRIVER_VERSION "v1.4.17"
+/* set this value to 0, if you do not want to enable dev dump function */
+#define GOODIX_ENABLE_DUMP_DEV 0
+#define GOODIX_MAX_TOUCH 10
+#define GOODIX_MAX_KEY 10
+#define GOODIX_PEN_MAX_PRESSURE 4096
+#define GOODIX_MAX_PEN_KEY 3
+#define GOODIX_PEN_MAX_TILT 90
+#define GOODIX_CFG_MAX_SIZE 4096
+#define GOODIX_FW_MAX_SIEZE (300 * 1024)
+#define GOODIX_MAX_STR_LABLE_LEN 64
+#define GOODIX_MAX_FRAMEDATA_LEN 4000
+#define GOODIX_GESTURE_DATA_LEN 16
+#define GOODIX_SPI_TRANS_MAX_LEN (10 * 1024)
+
+#define GOODIX_NORMAL_RESET_DELAY_MS 200
+#define GOODIX_HOLD_CPU_RESET_DELAY_MS 5
+
+#define GOODIX_RETRY_3 3
+#define GOODIX_RETRY_5 5
+#define GOODIX_RETRY_10 10
+
+#define TS_DEFAULT_FIRMWARE "goodix_firmware.bin"
+#define TS_DEFAULT_CFG_BIN "goodix_cfg_group.bin"
+
+enum GOODIX_GESTURE_TYP {
+	GESTURE_C = (1 << 0),
+	GESTURE_E = (1 << 1),
+	GESTURE_F = (1 << 2),
+	GESTURE_O = (1 << 3),
+	GESTURE_M = (1 << 4),
+	GESTURE_W = (1 << 5),
+	GESTURE_DOUBLE_TAP = (1 << 7),
+	GESTURE_SLIDE_UP = (1 << 8),
+	GESTURE_SLIDE_DOWN = (1 << 9),
+	GESTURE_SLIDE_LEFT = (1 << 10),
+	GESTURE_SLIDE_RIGHT = (1 << 11),
+	GESTURE_SINGLE_TAP = (1 << 12),
+	GESTURE_FOD_PRESS = (1 << 13)
+};
+
+enum CORD_PROB_STA {
+	CORE_MODULE_UNPROBED = 0,
+	CORE_MODULE_PROB_SUCCESS = 1,
+	CORE_MODULE_PROB_FAILED = -1,
+	CORE_MODULE_REMOVED = -2,
+};
+
+enum GOODIX_ERR_CODE {
+	GOODIX_EBUS = (1 << 0),
+	GOODIX_ECHECKSUM = (1 << 1),
+	GOODIX_EVERSION = (1 << 2),
+	GOODIX_ETIMEOUT = (1 << 3),
+	GOODIX_EMEMCMP = (1 << 4),
+
+	GOODIX_EOTHER = (1 << 7)
+};
+
+/* MAIN-ID */
+enum IC_TYPE_ID {
+	IC_TYPE_NONE,
+	IC_TYPE_NORMANDY,
+	IC_TYPE_NANJING,
+	IC_TYPE_YELLOWSTONE,
+	IC_TYPE_BERLIN_A,
+	IC_TYPE_BERLIN_B,
+	IC_TYPE_BERLIN_D,
+	IC_TYPE_NOTTINGHAM,
+	IC_TYPE_MARSEILLE,
+	IC_TYPE_ATB
+};
+
+/* SUB-ID
+ * sub type of berlinB serial IC.
+ * for convenience we put the MAIN-ID on the hith bits,
+ * hith 8 bits is MAIN-ID, low 8 bits is MIN-ID
+ */
+enum BERLIN_B_SUB_ID {
+	IC_TYPE_SUB_B2 = (IC_TYPE_BERLIN_B << 8) | 0x2,
+	IC_TYPE_SUB_MCU2 = (IC_TYPE_BERLIN_B << 8) | 0x3,
+};
+
+enum GOODIX_IC_CONFIG_TYPE {
+	CONFIG_TYPE_TEST = 0,
+	CONFIG_TYPE_NORMAL = 1,
+	CONFIG_TYPE_HIGHSENSE = 2,
+	CONFIG_TYPE_CHARGER = 3,
+	CONFIG_TYPE_CHARGER_HS = 4,
+	CONFIG_TYPE_HOLSTER = 5,
+	CONFIG_TYPE_HOSTER_CH = 6,
+	CONFIG_TYPE_OTHER = 7,
+	/* keep this at the last */
+	GOODIX_MAX_CONFIG_GROUP = 8,
+};
+
+enum CHECKSUM_MODE {
+	CHECKSUM_MODE_U8_LE,
+	CHECKSUM_MODE_U16_LE,
+};
+
+#define MAX_SCAN_FREQ_NUM 8
+#define MAX_SCAN_RATE_NUM 8
+#define MAX_FREQ_NUM_STYLUS 8
+#define MAX_STYLUS_SCAN_FREQ_NUM 6
+#pragma pack(push, 1)
+struct flash_head {
+	uint32_t checksum;
+	uint32_t address;
+	uint32_t length;
+};
+
+struct frame_head {
+	uint8_t sync;
+	uint16_t frame_index;
+	uint16_t cur_frame_len;
+	uint16_t next_frame_len;
+	uint32_t data_en; /* 0- 7 for pack_en; 8 - 31 for type en */
+	uint8_t touch_pack_index;
+	uint8_t stylus_pack_index;
+	uint8_t res;
+	uint16_t checksum;
+};
+
+struct goodix_fw_version {
+	u8 rom_pid[6]; /* rom PID */
+	u8 rom_vid[3]; /* Mask VID */
+	u8 rom_vid_reserved;
+	u8 patch_pid[8]; /* Patch PID */
+	u8 patch_vid[4]; /* Patch VID */
+	u8 patch_vid_reserved;
+	u8 sensor_id;
+	u8 reserved[2];
+	u16 checksum;
+};
+
+struct goodix_ic_info_version {
+	u8 info_customer_id;
+	u8 info_version_id;
+	u8 ic_die_id;
+	u8 ic_version_id;
+	u32 config_id;
+	u8 config_version;
+	u8 frame_data_customer_id;
+	u8 frame_data_version_id;
+	u8 touch_data_customer_id;
+	u8 touch_data_version_id;
+	u8 reserved[3];
+};
+
+struct goodix_ic_info_feature { /* feature info*/
+	u16 freqhop_feature;
+	u16 calibration_feature;
+	u16 gesture_feature;
+	u16 side_touch_feature;
+	u16 stylus_feature;
+};
+
+struct goodix_ic_info_param { /* param */
+	u8 drv_num;
+	u8 sen_num;
+	u8 button_num;
+	u8 force_num;
+	u8 active_scan_rate_num;
+	u16 active_scan_rate[MAX_SCAN_RATE_NUM];
+	u8 mutual_freq_num;
+	u16 mutual_freq[MAX_SCAN_FREQ_NUM];
+	u8 self_tx_freq_num;
+	u16 self_tx_freq[MAX_SCAN_FREQ_NUM];
+	u8 self_rx_freq_num;
+	u16 self_rx_freq[MAX_SCAN_FREQ_NUM];
+	u8 stylus_freq_num;
+	u16 stylus_freq[MAX_FREQ_NUM_STYLUS];
+};
+
+struct goodix_ic_info_misc { /* other data */
+	u32 cmd_addr;
+	u16 cmd_max_len;
+	u32 cmd_reply_addr;
+	u16 cmd_reply_len;
+	u32 fw_state_addr;
+	u16 fw_state_len;
+	u32 fw_buffer_addr;
+	u16 fw_buffer_max_len;
+	u32 frame_data_addr;
+	u16 frame_data_head_len;
+	u16 fw_attr_len;
+	u16 fw_log_len;
+	u8 pack_max_num;
+	u8 pack_compress_version;
+	u16 stylus_struct_len;
+	u16 mutual_struct_len;
+	u16 self_struct_len;
+	u16 noise_struct_len;
+	u32 touch_data_addr;
+	u16 touch_data_head_len;
+	u16 point_struct_len;
+	u16 screen_real_max_x;
+	u16 screen_real_max_y;
+	u32 mutual_rawdata_addr;
+	u32 mutual_diffdata_addr;
+	u32 mutual_refdata_addr;
+	u32 self_rawdata_addr;
+	u32 self_diffdata_addr;
+	u32 self_refdata_addr;
+	u32 iq_rawdata_addr;
+	u32 iq_refdata_addr;
+	u32 im_rawdata_addr;
+	u16 im_rawdata_len;
+	u32 noise_rawdata_addr;
+	u16 noise_rawdata_len;
+	u32 stylus_rawdata_addr;
+	u16 stylus_rawdata_len;
+	u32 noise_data_addr;
+	u32 esd_addr;
+	u32 auto_scan_cmd_addr;
+	u32 auto_scan_info_addr;
+};
+
+struct goodix_ic_info_other {
+	u16 normalize_k_version;
+	u32 irrigation_data_addr;
+	u32 algo_debug_data_addr;
+	u16 algo_debug_data_len;
+	u32 update_sync_data_addr;
+	u16 screen_max_x;
+	u16 screen_max_y;
+};
+
+struct goodix_ic_info {
+	u16 length;
+	struct goodix_ic_info_version version;
+	struct goodix_ic_info_feature feature;
+	struct goodix_ic_info_param parm;
+	struct goodix_ic_info_misc misc;
+	struct goodix_ic_info_other other;
+};
+
+// goodix_ic_info V2
+struct ic_info_v2_compatible_head {
+	u8 info_customer_id;
+	u8 info_version_id;
+	u32 info_extend_buffer_addr;
+	u16 info_extend_len;
+	u8 reserved[2];
+};
+
+struct ic_info_v2_ver_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u32 config_id;
+	u8 config_version;
+	u8 frame_data_customer_id;
+	u8 frame_data_version_id;
+	u8 touch_data_customer_id;
+	u8 touch_data_version_id;
+	u8 reserved[3];
+};
+
+struct ic_info_v2_bsp_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u8 drv_num;
+	u8 sen_num;
+	u8 ic_die_id;
+	u8 ic_version_id;
+};
+
+struct ic_info_v2_param_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u8 active_scan_rate_num;
+	u16 active_scan_rate[MAX_SCAN_RATE_NUM];
+	u8 mutual_freq_num;
+	u16 mutual_freq[MAX_SCAN_FREQ_NUM];
+	u8 self_tx_freq_num;
+	u16 self_tx_freq[MAX_SCAN_FREQ_NUM];
+	u8 self_rx_freq_num;
+	u16 self_rx_freq[MAX_SCAN_FREQ_NUM];
+	u8 stylus_freq_num;
+	u16 stylus_freq[MAX_FREQ_NUM_STYLUS];
+};
+
+struct ic_info_v2_addr_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u32 cmd_addr;
+	u16 cmd_max_len;
+	u32 cmd_reply_addr;
+	u16 cmd_reply_len;
+	u32 fw_state_addr;
+	u16 fw_state_len;
+	u32 fw_buffer_addr;
+	u16 fw_buffer_max_len;
+};
+
+struct ic_info_v2_protocol_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u32 frame_data_addr;
+	u16 frame_data_head_len;
+	u8 frame_data_support;
+	u32 touch_data_addr;
+	u16 touch_data_head_len;
+	u16 point_struct_len;
+	u16 screen_real_max_x;
+	u16 screen_real_max_y;
+	u8 stylus_coor_len;
+};
+
+struct ic_info_v2_extend_rep_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u32 irrigation_data_addr;
+	u32 algo_debug_data_addr;
+	u16 algo_debug_data_len;
+	u16 screen_max_x;
+	u16 screen_max_y;
+	u32 normalize_b_addr;
+	u32 b_array_flash_data_addr;
+	u16 b_array_flash_data_len;
+};
+
+struct ic_info_v2_extend_addr_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	u32 mutual_rawdata_addr;
+	u32 mutual_diffdata_addr;
+	u32 mutual_refdata_addr;
+	u32 self_rawdata_addr;
+	u32 self_diffdata_addr;
+	u32 self_refdata_addr;
+	u32 iq_rawdata_addr;
+	u32 iq_refdata_addr;
+	u32 im_rawdata_addr;
+	u16 im_rawdata_len;
+	u32 noise_rawdata_addr;
+	u16 noise_rawdata_len;
+	u32 stylus_rawdata_addr;
+	u16 stylus_rawdata_len;
+	u32 noise_data_addr;
+	u32 esd_addr;
+};
+
+struct ic_info_v2_scan_parm_pkg {
+	u32 pkg_len:8;
+	u32 pkg_tag:24;
+	uint32_t auto_scan_cmd_addr;
+	uint32_t auto_scan_info_addr;
+};
+
+struct goodix_ic_info_v2 {
+	u16 length;
+	struct ic_info_v2_compatible_head head;
+	struct ic_info_v2_ver_pkg ver_pkg;
+	struct ic_info_v2_bsp_pkg bsp_pkg;
+	struct ic_info_v2_param_pkg param_pkg;
+	struct ic_info_v2_addr_pkg addr_pkg;
+	struct ic_info_v2_protocol_pkg protocol_pkg;
+	struct ic_info_v2_extend_rep_pkg extend_rep_pkg;
+	struct ic_info_v2_extend_addr_pkg extend_addr_pkg;
+	struct ic_info_v2_scan_parm_pkg scan_parm_pkg;
+};
+
+struct ic_info_v2_pkg {
+	uint32_t pkg_len:8;
+	uint32_t pkg_ver:12;
+	uint32_t pkg_tag:12;
+	uint8_t data[];
+};
+
+#pragma pack(pop)
+
+/*
+ * struct goodix_module - external modules container
+ * @head: external modules list
+ * @initialized: whether this struct is initialized
+ * @mutex: mutex lock
+ * @wq: workqueue to do register work
+ * @core_data: core_data pointer
+ */
+struct goodix_module {
+	struct list_head head;
+	bool initialized;
+	struct mutex mutex;
+	struct workqueue_struct *wq;
+	struct goodix_ts_core *core_data;
+};
+
+/*
+ * struct goodix_ts_board_data -  board data
+ * @avdd_name: name of analoy regulator
+ * @iovdd_name: name of analoy regulator
+ * @reset_gpio: reset gpio number
+ * @irq_gpio: interrupt gpio number
+ * @irq_flag: irq trigger type
+ * @swap_axis: whether swaw x y axis
+ * @panel_max_x/y/w/p: resolution and size
+ * @pannel_key_map: key map
+ * @fw_name: name of the firmware image
+ */
+struct goodix_ts_board_data {
+	char avdd_name[GOODIX_MAX_STR_LABLE_LEN];
+	char iovdd_name[GOODIX_MAX_STR_LABLE_LEN];
+	int reset_gpio;
+	int irq_gpio;
+	int avdd_gpio;
+	int iovdd_gpio;
+	unsigned int irq_flags;
+
+	unsigned int swap_axis;
+	unsigned int panel_max_x;
+	unsigned int panel_max_y;
+	unsigned int panel_max_w; /*major and minor*/
+	unsigned int panel_max_p; /*pressure*/
+
+	bool pen_enable;
+	bool sleep_enable;
+	bool esd_enable;
+	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
+	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN];
+#ifdef CONFIG_DRM_PANEL_NOTIFY
+	struct drm_panel *active_panel;
+#endif
+};
+
+enum goodix_fw_update_mode {
+	UPDATE_MODE_DEFAULT = 0,
+	UPDATE_MODE_FORCE = (1 << 0), /* force update mode */
+	UPDATE_MODE_BLOCK = (1 << 1), /* update in block mode */
+	UPDATE_MODE_FLASH_CFG = (1 << 2), /* reflash config */
+	UPDATE_MODE_SRC_SYSFS = (1 << 4), /* firmware file from sysfs */
+	UPDATE_MODE_SRC_HEAD = (1 << 5), /* firmware file from head file */
+	UPDATE_MODE_SRC_REQUEST = (1 << 6), /* request firmware */
+	UPDATE_MODE_SRC_ARGS = (1 << 7), /* firmware data from function args */
+};
+
+#define MAX_CMD_DATA_LEN 10
+#define MAX_CMD_BUF_LEN 16
+#pragma pack(1)
+struct goodix_ts_cmd {
+	union {
+		struct {
+			u8 state;
+			u8 ack;
+			u8 len;
+			u8 cmd;
+			u8 data[MAX_CMD_DATA_LEN];
+		};
+		u8 buf[MAX_CMD_BUF_LEN];
+	};
+};
+#pragma pack()
+
+/* interrupt event type */
+enum ts_event_type {
+	EVENT_INVALID = 0,
+	EVENT_TOUCH = (1 << 0), /* finger touch event */
+	EVENT_PEN = (1 << 1), /* pen event */
+	EVENT_REQUEST = (1 << 2),
+	EVENT_GESTURE = (1 << 3),
+};
+
+enum ts_point_type {
+	POINT_TYPE_NULL = 0,
+	POINT_TYPE_STYLUS_HOVER = 1,
+	POINT_TYPE_FINGER = 2,
+	POINT_TYPE_STYLUS = 3,
+	POINT_TYPE_GLOVE = 4,
+	POINT_TYPE_KEY = 5,
+};
+
+enum ts_request_type {
+	REQUEST_TYPE_CONFIG = 1,
+	REQUEST_TYPE_RESET = 3,
+};
+
+/* notifier event */
+enum ts_notify_event {
+	NOTIFY_FWUPDATE_START,
+	NOTIFY_FWUPDATE_FAILED,
+	NOTIFY_FWUPDATE_SUCCESS,
+	NOTIFY_SUSPEND,
+	NOTIFY_RESUME,
+	NOTIFY_ESD_OFF,
+	NOTIFY_ESD_ON,
+	NOTIFY_CFG_BIN_FAILED,
+	NOTIFY_CFG_BIN_SUCCESS,
+};
+
+enum touch_point_status {
+	TS_NONE,
+	TS_RELEASE,
+	TS_TOUCH,
+};
+/* coordinate package */
+struct goodix_ts_coords {
+	int status; /* NONE, RELEASE, TOUCH */
+	unsigned int x, y, w, p;
+};
+
+struct goodix_pen_coords {
+	int status; /* NONE, RELEASE, TOUCH */
+	int tool_type; /* BTN_TOOL_RUBBER BTN_TOOL_PEN */
+	unsigned int x, y, p;
+	signed char tilt_x;
+	signed char tilt_y;
+};
+
+struct goodix_ts_key {
+	int status;
+	int code;
+};
+
+/* touch event data */
+struct goodix_touch_data {
+	int touch_num;
+	u8 palm_flag;
+	struct goodix_ts_key keys[GOODIX_MAX_KEY];
+	struct goodix_ts_coords coords[GOODIX_MAX_TOUCH];
+};
+
+struct goodix_pen_data {
+	bool is_hover;
+	struct goodix_pen_coords coords;
+	struct goodix_ts_key keys[GOODIX_MAX_PEN_KEY];
+};
+
+/*
+ * struct goodix_ts_event - touch event struct
+ * @event_type: touch event type, touch data or
+ *	request event
+ * @event_data: event data
+ */
+struct goodix_ts_event {
+	u8 event_type;
+	u8 fp_flag; /* finger print DOWN flag */
+	u8 request_code; /* represent the request type */
+	u8 gesture_type;
+	u8 gesture_data[GOODIX_GESTURE_DATA_LEN];
+	struct goodix_touch_data touch_data;
+	struct goodix_touch_data pre_touch;
+	struct goodix_pen_data pen_data;
+	struct goodix_pen_data pre_pen;
+};
+
+enum goodix_ic_bus_type {
+	GOODIX_BUS_TYPE_NONE,
+	GOODIX_BUS_TYPE_I2C,
+	GOODIX_BUS_TYPE_SPI,
+	GOODIX_BUS_TYPE_I3C,
+};
+
+struct goodix_bus_interface {
+	int bus_type;
+	int ic_type;
+	int sub_ic_type;
+	struct device *dev;
+	struct mutex spi_lock;
+	u8 tx_buf[GOODIX_SPI_TRANS_MAX_LEN];
+	u8 rx_buf[GOODIX_SPI_TRANS_MAX_LEN];
+	int (*read)(struct device *dev, unsigned int addr, unsigned char *data,
+		    unsigned int len);
+	int (*write)(struct device *dev, unsigned int addr, unsigned char *data,
+		     unsigned int len);
+};
+
+struct goodix_ts_hw_ops {
+	int (*power_on)(struct goodix_ts_core *cd, bool on);
+	int (*resume)(struct goodix_ts_core *cd);
+	int (*suspend)(struct goodix_ts_core *cd);
+	int (*gesture)(struct goodix_ts_core *cd, int gesture_type);
+	int (*reset)(struct goodix_ts_core *cd, int delay_ms);
+	int (*irq_enable)(struct goodix_ts_core *cd, bool enable);
+	int (*read)(struct goodix_ts_core *cd, unsigned int addr,
+		    unsigned char *data, unsigned int len);
+	int (*write)(struct goodix_ts_core *cd, unsigned int addr,
+		     unsigned char *data, unsigned int len);
+	int (*read_flash)(struct goodix_ts_core *cd, unsigned int addr,
+			  unsigned char *data, unsigned int len);
+	int (*send_cmd)(struct goodix_ts_core *cd, struct goodix_ts_cmd *cmd);
+	int (*send_config)(struct goodix_ts_core *cd, u8 *config, int len);
+	int (*read_config)(struct goodix_ts_core *cd, u8 *config_data,
+			   int size);
+	int (*read_version)(struct goodix_ts_core *cd,
+			    struct goodix_fw_version *version);
+	int (*get_ic_info)(struct goodix_ts_core *cd,
+			   struct goodix_ic_info *ic_info);
+	int (*esd_check)(struct goodix_ts_core *cd);
+	int (*event_handler)(struct goodix_ts_core *cd,
+			     struct goodix_ts_event *ts_event);
+	int (*after_event_handler)(struct goodix_ts_core *cd);
+};
+
+/*
+ * struct goodix_ts_esd - esd protector structure
+ * @esd_work: esd delayed work
+ * @esd_on: 1 - turn on esd protection, 0 - turn
+ *  off esd protection
+ */
+struct goodix_ts_esd {
+	bool irq_status;
+	atomic_t esd_on;
+	struct delayed_work esd_work;
+	struct goodix_ts_core *ts_core;
+};
+
+enum goodix_core_init_stage {
+	CORE_UNINIT,
+	CORE_INIT_FAIL,
+	CORE_INIT_STAGE1,
+	CORE_INIT_STAGE2
+};
+
+enum update_status {
+	UPSTA_NOTWORK = 0,
+	UPSTA_PREPARING,
+	UPSTA_UPDATING,
+	UPSTA_SUCCESS,
+	UPSTA_FAILED
+};
+
+struct fw_subsys_info {
+	u8 type;
+	u32 size;
+	u32 flash_addr;
+	const u8 *data;
+};
+
+#pragma pack(1)
+struct firmware_summary {
+	u32 size;
+	u32 checksum;
+	u8 hw_pid[6];
+	u8 hw_vid[3];
+	u8 fw_pid[8];
+	u8 fw_vid[4];
+	u8 subsys_num;
+	u8 chip_type;
+	u8 protocol_ver;
+	u8 bus_type;
+	u8 flash_protect;
+	// u8 reserved[8];
+	struct fw_subsys_info subsys[47];
+};
+#pragma pack()
+
+struct update_info_t {
+	int header_size;
+	int subsys_info_offset;
+	u32 isp_ram_reg;
+	u32 flash_cmd_reg;
+	u32 isp_buffer_reg;
+	u32 config_data_reg;
+	u32 misctl_reg;
+	u32 watch_dog_reg;
+	u32 enable_misctl_val;
+};
+
+struct firmware_data {
+	struct firmware_summary fw_summary;
+	const struct firmware *firmware;
+};
+
+struct goodix_ic_config {
+	int len;
+	u8 data[GOODIX_CFG_MAX_SIZE];
+};
+
+struct goodix_cfg_bundle {
+	int len;
+	u32 flash_addr;
+	u8 data[4 * GOODIX_CFG_MAX_SIZE];
+};
+
+struct fw_update_ctrl {
+	bool initialized;
+	struct mutex mutex;
+	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
+	u32 cfg_id;
+	int mode;
+	enum update_status status;
+	int spend_time;
+
+	struct firmware_data fw_data;
+	struct goodix_ic_config *ic_config;
+	struct goodix_ts_core *core_data;
+	struct update_info_t *update_info;
+	struct kobject *kobj;
+};
+
+struct goodix_ts_device {
+	struct platform_device pdev;
+	struct goodix_bus_interface bus;
+	struct goodix_ts_board_data board_data;
+};
+
+struct goodix_ts_core {
+	int init_stage;
+	struct cdev tool_cdev;
+	dev_t tool_devno;
+	char tool_dev_name[GOODIX_MAX_STR_LABLE_LEN];
+	struct fw_update_ctrl update_ctrl;
+	struct kobject *gesture_kobj;
+	struct proc_dir_entry *proc_dir_entry;
+	struct platform_device *pdev;
+	struct goodix_bus_interface *bus;
+	struct goodix_ts_board_data *board_data;
+	struct goodix_fw_version fw_version;
+	struct goodix_ic_info ic_info;
+	struct goodix_ic_info_v2 ic_info_v2;
+	struct goodix_ts_hw_ops *hw_ops;
+	struct input_dev *input_dev;
+	struct input_dev *pen_dev;
+	struct mutex cmd_lock;
+	/* TODO counld we remove this from core data? */
+	struct goodix_ts_event ts_event;
+
+	struct work_struct resume_work;
+	struct work_struct self_check_work;
+
+	/* every pointer of this array represent a kind of config */
+	struct goodix_ic_config ic_configs[GOODIX_MAX_CONFIG_GROUP];
+	struct goodix_cfg_bundle cfg_bundle;
+	struct regulator *avdd;
+	struct regulator *iovdd;
+	u32 gesture_type;
+
+	char input_name[32];
+	char input_pen_name[32];
+
+	int power_on;
+	int irq;
+	size_t irq_trig_cnt;
+
+	atomic_t irq_enabled;
+	atomic_t suspended;
+	/* when this flag is true, driver should not clean the sync flag */
+	bool tools_ctrl_sync;
+
+	struct goodix_ts_esd ts_esd;
+
+#ifdef CONFIG_DRM_MEDIATEK
+	struct notifier_block pm_notifier;
+#elif defined(CONFIG_DRM_PANEL_NOTIFY)
+	void *cookie;
+#elif defined(CONFIG_FB)
+	struct notifier_block pm_notifier;
+#endif
+};
+
+/* log macro */
+extern bool debug_log_flag;
+void ts_info(struct device *dev, const char *fmt, ...);
+void ts_err(struct device *dev, const char *fmt, ...);
+void ts_debug(struct device *dev, const char *fmt, ...);
+
+extern int g_pdev_id;
+struct goodix_ts_hw_ops *goodix_get_hw_ops(void);
+int goodix_get_config_proc(struct goodix_ts_core *cd);
+
+int goodix_spi_bus_init(void);
+void goodix_spi_bus_exit(void);
+int goodix_i2c_bus_init(void);
+void goodix_i2c_bus_exit(void);
+
+u32 goodix_append_checksum(u8 *data, int len, int mode);
+int checksum_cmp(const u8 *data, int size, int mode);
+int is_risk_data(struct goodix_ts_core *cd, const u8 *data, int size);
+u32 goodix_get_file_config_id(u8 *ic_config);
+void goodix_rotate_abcd2cbad(int tx, int rx, s16 *data);
+void print_ic_info(struct goodix_ts_core *cd, struct goodix_ic_info *ic_info);
+
+char *find_file_prefix(const char *file_name);
+int goodix_fw_update_init(struct goodix_ts_core *cd);
+void goodix_fw_update_uninit(struct goodix_ts_core *cd);
+int goodix_do_fw_update(struct goodix_ts_core *cd, int mode);
+int goodix_get_ic_type(struct device *dev,
+		       struct goodix_bus_interface *bus_inf);
+int gesture_module_init(struct goodix_ts_core *cd);
+void gesture_module_exit(struct goodix_ts_core *cd);
+int inspect_module_init(struct goodix_ts_core *cd);
+void inspect_module_exit(struct goodix_ts_core *cd);
+int goodix_tools_init(struct goodix_ts_core *cd);
+void goodix_tools_exit(struct goodix_ts_core *cd);
+void goodix_ts_esd_on(struct goodix_ts_core *cd);
+void goodix_ts_esd_off(struct goodix_ts_core *cd);
+
+int goodix_ts_report_gesture(struct goodix_ts_core *cd,
+			     struct goodix_ts_event *event);
+
+int goodix_dump_dev_init(struct goodix_ts_core *cd);
+void goodix_dump_dev_exit(void);
+void goodix_get_dump_frame(struct goodix_ts_core *cd);
+
+int goodix_ts_replay_init(struct goodix_ts_core *core_data);
+void goodix_ts_replay_exit(struct goodix_ts_core *core_data);
+int goodix_ts_replay_record(struct goodix_ts_core *core_data, struct goodix_ts_event *ts_event);
+
+#endif

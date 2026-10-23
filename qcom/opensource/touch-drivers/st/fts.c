@@ -54,6 +54,9 @@
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
+#if IS_ENABLED(CONFIG_GUNYAH_CRASH_CLEANER)
+#include <linux/gunyah/gunyah_crash_cleaner.h>
+#endif
 
 #if defined(CONFIG_DRM)
 #include <linux/soc/qcom/panel_event_notifier.h>
@@ -140,6 +143,77 @@ static int fts_enable_reg(struct fts_ts_info *info, bool enable);
 
 static int fts_chip_initialization(struct fts_ts_info *info, int init_type);
 static irqreturn_t st_irq_handler(int irq, void *data);
+
+#if IS_ENABLED(CONFIG_GUNYAH_CRASH_CLEANER)
+static void fts_crash_cleaner_reset_gpio(struct fts_ts_info *info)
+{
+	int reset_gpio;
+
+	if (!info)
+		return;
+
+	reset_gpio = info->reset_gpio;
+	if (reset_gpio == GPIO_NOT_DEFINED)
+		return;
+
+	gpio_set_value(reset_gpio, 0);
+	udelay(10);	/* busy-wait to satisfy crash cleaner atomic context */
+	gpio_set_value(reset_gpio, 1);
+}
+
+static int fts_crash_cleaner_notifier(struct notifier_block *nb,
+				      unsigned long event, void *data)
+{
+	struct fts_ts_info *info = container_of(nb, struct fts_ts_info,
+						crash_cleaner_nb);
+#if IS_ENABLED(CONFIG_QTS_ENABLE)
+	int ret;
+#endif
+
+	fts_crash_cleaner_reset_gpio(info);
+#if IS_ENABLED(CONFIG_QTS_ENABLE)
+	ret = qts_trusted_touch_mem_release(info);
+	if (ret && ret != -ENODEV && ret != -EOPNOTSUPP)
+		logError(1, "%s crash cleaner mem release failed: %d\n", tag, ret);
+#endif
+
+	return NOTIFY_OK;
+}
+
+static void fts_crash_cleaner_register(struct fts_ts_info *info)
+{
+	int ret;
+
+	if (!info || info->crash_cleaner_registered)
+		return;
+
+	if (info->reset_gpio == GPIO_NOT_DEFINED)
+		return;
+
+	info->crash_cleaner_nb.notifier_call = fts_crash_cleaner_notifier;
+	ret = gunyah_crash_cleaner_register(&info->crash_cleaner_nb);
+	if (ret) {
+		logError(1, "%s failed to register crash cleaner notifier: %d\n",
+			 tag, ret);
+		return;
+	}
+
+	info->crash_cleaner_registered = true;
+	logError(0, "%s registered crash cleaner notifier\n", tag);
+}
+
+static void fts_crash_cleaner_unregister(struct fts_ts_info *info)
+{
+	if (!info || !info->crash_cleaner_registered)
+		return;
+
+	gunyah_crash_cleaner_unregister(&info->crash_cleaner_nb);
+	info->crash_cleaner_registered = false;
+}
+#else
+static inline void fts_crash_cleaner_register(struct fts_ts_info *info) {}
+static inline void fts_crash_cleaner_unregister(struct fts_ts_info *info) {}
+#endif
 
 #if defined(CONFIG_DRM)
 static struct drm_panel *active_panel;
@@ -3119,7 +3193,8 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 
 	logError(1, "%s Interrupt Mode\n", tag);
 	if (request_irq(info->irq, st_irq_handler,
-			info->board->irq_flags, FTS_TS_DRV_NAME, info)) {
+			info->board->irq_flags | IRQF_NO_AUTOEN,
+			FTS_TS_DRV_NAME, info)) {
 		logError(1, "%s Request irq failed\n", tag);
 		kfree(info->event_dispatch_table);
 		error = -EBUSY;
@@ -4645,16 +4720,22 @@ skip_to_fw_update:
 			   msecs_to_jiffies(EXP_FN_WORK_DELAY_MS));
 #endif
 
+	fts_crash_cleaner_register(info);
+
 	logError(1, "%s Probe Finished!\n", tag);
 	return OK;
 
 ProbeErrorExit_6:
+	fts_crash_cleaner_unregister(info);
+
 	input_unregister_device(info->input_dev);
 
 ProbeErrorExit_5:
 	destroy_workqueue(info->event_wq);
 
 ProbeErrorExit_4:
+	if (info->qts_en)
+		qts_client_unregister();
 	/* destroy_workqueue(info->fwu_workqueue); */
 	wakeup_source_unregister(info->wakesrc);
 #ifndef CONFIG_ARCH_QTI_VM
@@ -4798,6 +4879,8 @@ static int st_fts_spi_probe(struct spi_device *spi)
   */
 static void st_fts_remove_entry(struct fts_ts_info *info)
 {
+	fts_crash_cleaner_unregister(info);
+
 	/* sysfs stuff */
 	sysfs_remove_group(&info->dev->kobj, &info->attrs);
 

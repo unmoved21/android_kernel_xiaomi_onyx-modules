@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 enum qts_client {
 	QTS_CLIENT_PRIMARY_TOUCH,
@@ -50,3 +50,6 @@ struct qts_vendor_data {
 
 int qts_client_register(struct qts_vendor_data *qts_vendor_data);
 void qts_client_unregister(void);
+#ifdef CONFIG_ARCH_QTI_VM
+int qts_trusted_touch_mem_release(void *vendor_data);
+#endif

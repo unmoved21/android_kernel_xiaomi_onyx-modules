@@ -16,6 +16,7 @@
 #include <linux/sysfs.h>
 #include <linux/sort.h>
 #include <linux/atomic.h>
+#include <linux/interrupt.h>
 #include <linux/pinctrl/qcom-pinctrl.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
@@ -779,18 +780,21 @@ static void qts_trusted_touch_abort_pvm(struct qts_data *qts_data)
 	case PVM_IOMEM_LENT:
 	case PVM_IOMEM_LENT_NOTIFIED:
 	case PVM_IOMEM_RELEASE_NOTIFIED:
+		if (qts_data->vm_info->vm_mem_handle) {
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
-		rc = ghd_rm_mem_reclaim(qts_data->vm_info->vm_mem_handle, 0);
+			rc = ghd_rm_mem_reclaim(qts_data->vm_info->vm_mem_handle, 0);
 #else
-		rc = gh_rm_mem_reclaim(qts_data->vm_info->vm_mem_handle, 0);
+			rc = gh_rm_mem_reclaim(qts_data->vm_info->vm_mem_handle, 0);
 #endif
 
-		if (rc) {
-			pr_err("failed to reclaim iomem on pvm rc:%d\n", rc);
-			qts_trusted_touch_set_vm_state(qts_data, PVM_IOMEM_RELEASE_NOTIFIED);
-			return;
+			if (rc) {
+				pr_err("failed to reclaim iomem on pvm rc:%d\n", rc);
+				qts_trusted_touch_set_vm_state(qts_data,
+						PVM_IOMEM_RELEASE_NOTIFIED);
+				return;
+			}
+			qts_data->vm_info->vm_mem_handle = 0;
 		}
-		qts_data->vm_info->vm_mem_handle = 0;
 		fallthrough;
 	case PVM_IOMEM_RECLAIMED:
 	case PVM_INTERRUPT_DISABLED:
@@ -1090,6 +1094,9 @@ static int qts_trusted_touch_pvm_vm_mode_enable(struct qts_data *qts_data)
 	int rc = 0;
 	struct trusted_touch_vm_info *vm_info = qts_data->vm_info;
 	int lend_irq;
+#if IS_ENABLED(CONFIG_MPM_LEGACY)
+	int dir_conn_irq = 0;
+#endif
 
 	atomic_set(&qts_data->trusted_touch_transition, 1);
 	mutex_lock(&qts_data->transition_lock);
@@ -1109,12 +1116,22 @@ static int qts_trusted_touch_pvm_vm_mode_enable(struct qts_data *qts_data)
 		qts_data->vendor_ops.enable_touch_irq(qts_data->vendor_data, false);
 	qts_trusted_touch_set_vm_state(qts_data, PVM_INTERRUPT_DISABLED);
 
-	rc = qts_vm_mem_lend(qts_data);
-	if (rc) {
-		pr_err("Failed to lend memory\n");
-		goto abort_handler;
+	if (qts_data->irq <= 0 && qts_data->vendor_ops.get_irq_num)
+		qts_data->irq = qts_data->vendor_ops.get_irq_num(qts_data->vendor_data);
+
+	/*
+	 * Wait for in-flight IRQ handling to finish before lending memory/IRQ.
+	 * disable_irq_nosync() in vendor callbacks does not wait for currently
+	 * running top-half handlers.
+	 */
+	if (qts_data->irq > 0) {
+		synchronize_irq(qts_data->irq);
+#if IS_ENABLED(CONFIG_MPM_LEGACY)
+		dir_conn_irq = msm_gpio_get_dir_conn_irq(qts_data->irq);
+		if (dir_conn_irq > 0)
+			synchronize_irq(dir_conn_irq);
+#endif
 	}
-	pr_debug("vm mem lend success\n");
 
 	if (atomic_read(&qts_data->delayed_pvm_probe_pending)) {
 		if (qts_data->vendor_ops.get_irq_num)
@@ -1125,7 +1142,6 @@ static int qts_trusted_touch_pvm_vm_mode_enable(struct qts_data *qts_data)
 
 #if IS_ENABLED(CONFIG_MPM_LEGACY)
 	struct irq_data *irqd;
-	int dir_conn_irq = 0;
 
 	dir_conn_irq =  msm_gpio_get_dir_conn_irq(qts_data->irq);
 	pr_info("gpio_irq=%d dir_conn_irq=%d\n", qts_data->irq, dir_conn_irq);
@@ -1166,6 +1182,23 @@ static int qts_trusted_touch_pvm_vm_mode_enable(struct qts_data *qts_data)
 		pr_err("Failed to notify irq\n");
 		goto abort_handler;
 	}
+	qts_trusted_touch_set_vm_state(qts_data, PVM_IRQ_LENT_NOTIFIED);
+
+	/*
+	 * Lend TLMM/MMIO only after IRQ ownership moves away from PVM to avoid
+	 * a window where PVM can still service the IRQ against lent memory.
+	 */
+	rc = qts_vm_mem_lend(qts_data);
+	if (rc) {
+		pr_err("Failed to lend memory\n");
+		/*
+		 * Preserve IRQ-lent state so abort cleanup always reclaims IRQ
+		 * first, then reclaims memory if a handle was created.
+		 */
+		qts_trusted_touch_set_vm_state(qts_data, PVM_IRQ_LENT_NOTIFIED);
+		goto abort_handler;
+	}
+	pr_debug("vm mem lend success\n");
 	qts_trusted_touch_set_vm_state(qts_data, PVM_IRQ_LENT_NOTIFIED);
 
 	if (qts_data->vendor_ops.post_la_tui_enable)
@@ -1929,6 +1962,39 @@ void qts_client_unregister(void)
 	kfree(qts_data_entries);
 }
 EXPORT_SYMBOL_GPL(qts_client_unregister);
+
+#ifdef CONFIG_ARCH_QTI_VM
+int qts_trusted_touch_mem_release(void *vendor_data)
+{
+	struct qts_data *qts_data = NULL;
+	int i, ret;
+
+	if (!vendor_data || !qts_data_entries)
+		return -EINVAL;
+
+	for (i = QTS_CLIENT_PRIMARY_TOUCH; i < QTS_CLIENT_MAX; i++) {
+		if (qts_data_entries->info[i].vendor_data == vendor_data) {
+			qts_data = &qts_data_entries->info[i];
+			break;
+		}
+	}
+
+	if (!qts_data || !qts_data->tui_supported || !qts_data->vm_info)
+		return -ENODEV;
+
+	if (!qts_data->vm_info->vm_mem_handle)
+		return 0;
+
+	ret = qts_vm_mem_release(qts_data);
+	if (!ret && atomic_read(&qts_data->trusted_touch_mode) == TRUSTED_TOUCH_VM_MODE) {
+		qts_trusted_touch_set_vm_state(qts_data, TRUSTED_TOUCH_TVM_INIT);
+		atomic_set(&qts_data->trusted_touch_enabled, 0);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qts_trusted_touch_mem_release);
+#endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Touchscreen driver");
 MODULE_LICENSE("GPL");

@@ -1,0 +1,472 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Goodix Touchscreen Driver
+ * Copyright (C) 2020 - 2021 Goodix, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be a reference
+ * to you, when you are integrating the GOODiX's CTP IC into your system,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/atomic.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/fs.h>
+#include <linux/list.h>
+#include <linux/ioctl.h>
+#include <linux/wait.h>
+#include <linux/cdev.h>
+#include "goodix_ts_core.h"
+
+#define GOODIX_TOOLS_NAME "gtp_tools"
+#define GOODIX_TOOLS_VER_MAJOR 1
+#define GOODIX_TOOLS_VER_MINOR 0
+static const u16 goodix_tools_ver =
+	((GOODIX_TOOLS_VER_MAJOR << 8) + (GOODIX_TOOLS_VER_MINOR));
+
+#define GOODIX_TS_IOC_MAGIC 'G'
+#define NEGLECT_SIZE_MASK (~(_IOC_SIZEMASK << _IOC_SIZESHIFT))
+
+#define GTP_IRQ_ENABLE _IO(GOODIX_TS_IOC_MAGIC, 0)
+#define GTP_DEV_RESET _IO(GOODIX_TS_IOC_MAGIC, 1)
+#define GTP_SEND_COMMAND (_IOW(GOODIX_TS_IOC_MAGIC, 2, u8) & NEGLECT_SIZE_MASK)
+#define GTP_SEND_CONFIG (_IOW(GOODIX_TS_IOC_MAGIC, 3, u8) & NEGLECT_SIZE_MASK)
+#define GTP_ASYNC_READ (_IOR(GOODIX_TS_IOC_MAGIC, 4, u8) & NEGLECT_SIZE_MASK)
+#define GTP_SYNC_READ (_IOR(GOODIX_TS_IOC_MAGIC, 5, u8) & NEGLECT_SIZE_MASK)
+#define GTP_ASYNC_WRITE (_IOW(GOODIX_TS_IOC_MAGIC, 6, u8) & NEGLECT_SIZE_MASK)
+#define GTP_READ_CONFIG (_IOW(GOODIX_TS_IOC_MAGIC, 7, u8) & NEGLECT_SIZE_MASK)
+#define GTP_ESD_ENABLE _IO(GOODIX_TS_IOC_MAGIC, 8)
+#define GTP_TOOLS_VER (_IOR(GOODIX_TS_IOC_MAGIC, 9, u8) & NEGLECT_SIZE_MASK)
+#define GTP_TOOLS_CTRL_SYNC \
+	(_IOW(GOODIX_TS_IOC_MAGIC, 10, u8) & NEGLECT_SIZE_MASK)
+
+#define MAX_BUF_LENGTH (16 * 1024)
+#define IRQ_FALG (0x01 << 2)
+
+#define I2C_MSG_HEAD_LEN 20
+
+/* per-driver class shared across all tool cdev instances */
+static struct class *goodix_tools_class;
+
+/* read data asynchronous,
+ * success return data length, otherwise return < 0
+ */
+static int async_read(struct goodix_ts_core *ts_core, void __user *arg)
+{
+	u8 *databuf = NULL;
+	int ret = 0;
+	u32 reg_addr, length;
+	u8 i2c_msg_head[I2C_MSG_HEAD_LEN];
+	const struct goodix_ts_hw_ops *hw_ops = ts_core->hw_ops;
+	struct device *dev = ts_core->bus->dev;
+
+	ret = copy_from_user(&i2c_msg_head, arg, I2C_MSG_HEAD_LEN);
+	if (ret)
+		return -EFAULT;
+
+	reg_addr = i2c_msg_head[0] + (i2c_msg_head[1] << 8) +
+		   (i2c_msg_head[2] << 16) + (i2c_msg_head[3] << 24);
+	length = i2c_msg_head[4] + (i2c_msg_head[5] << 8) +
+		 (i2c_msg_head[6] << 16) + (i2c_msg_head[7] << 24);
+	if (length > MAX_BUF_LENGTH) {
+		ts_err(dev, "buffer too long:%d > %d", length, MAX_BUF_LENGTH);
+		return -EINVAL;
+	}
+	databuf = kzalloc(length, GFP_KERNEL);
+	if (!databuf)
+		return -ENOMEM;
+
+	if (hw_ops->read(ts_core, reg_addr, databuf, length)) {
+		ret = -EBUSY;
+		ts_err(dev, "Read i2c failed");
+		goto err_out;
+	}
+	ret = copy_to_user((u8 *)arg + I2C_MSG_HEAD_LEN, databuf, length);
+	if (ret) {
+		ret = -EFAULT;
+		ts_err(dev, "Copy_to_user failed");
+		goto err_out;
+	}
+	ret = length;
+err_out:
+	kfree(databuf);
+	return ret;
+}
+
+/* if success return config data length */
+static int read_config_data(struct goodix_ts_core *ts_core, void __user *arg)
+{
+	int ret = 0;
+	u32 reg_addr, length;
+	u8 i2c_msg_head[I2C_MSG_HEAD_LEN];
+	u8 *tmp_buf;
+	struct device *dev = ts_core->bus->dev;
+
+	ret = copy_from_user(&i2c_msg_head, arg, I2C_MSG_HEAD_LEN);
+	if (ret) {
+		ts_err(dev, "Copy data from user failed");
+		return -EFAULT;
+	}
+	reg_addr = i2c_msg_head[0] + (i2c_msg_head[1] << 8) +
+		   (i2c_msg_head[2] << 16) + (i2c_msg_head[3] << 24);
+	length = i2c_msg_head[4] + (i2c_msg_head[5] << 8) +
+		 (i2c_msg_head[6] << 16) + (i2c_msg_head[7] << 24);
+	ts_info(dev, "read config,reg_addr=0x%x, length=%d", reg_addr, length);
+	if (length > MAX_BUF_LENGTH) {
+		ts_err(dev, "buffer too long:%d > %d", length, MAX_BUF_LENGTH);
+		return -EINVAL;
+	}
+	tmp_buf = kzalloc(length, GFP_KERNEL);
+	if (!tmp_buf)
+		return -ENOMEM;
+
+	/* if reg_addr == 0, read config data with specific flow */
+	if (!reg_addr) {
+		if (ts_core->hw_ops->read_config)
+			ret = ts_core->hw_ops->read_config(ts_core, tmp_buf,
+							   length);
+		else
+			ret = -EINVAL;
+	} else {
+		ret = ts_core->hw_ops->read(ts_core, reg_addr, tmp_buf, length);
+		if (!ret)
+			ret = length;
+	}
+	if (ret <= 0)
+		goto err_out;
+
+	if (copy_to_user((u8 *)arg + I2C_MSG_HEAD_LEN, tmp_buf, ret)) {
+		ret = -EFAULT;
+		ts_err(dev, "Copy_to_user failed");
+	}
+
+err_out:
+	kfree(tmp_buf);
+	return ret;
+}
+
+/* write data to i2c asynchronous,
+ * success return bytes write, else return <= 0
+ */
+static int async_write(struct goodix_ts_core *ts_core, void __user *arg)
+{
+	u8 *databuf;
+	int ret = 0;
+	u32 reg_addr, length;
+	u8 i2c_msg_head[I2C_MSG_HEAD_LEN];
+	const struct goodix_ts_hw_ops *hw_ops = ts_core->hw_ops;
+	struct device *dev = ts_core->bus->dev;
+
+	ret = copy_from_user(&i2c_msg_head, arg, I2C_MSG_HEAD_LEN);
+	if (ret) {
+		ts_err(dev, "Copy data from user failed");
+		return -EFAULT;
+	}
+	reg_addr = i2c_msg_head[0] + (i2c_msg_head[1] << 8) +
+		   (i2c_msg_head[2] << 16) + (i2c_msg_head[3] << 24);
+	length = i2c_msg_head[4] + (i2c_msg_head[5] << 8) +
+		 (i2c_msg_head[6] << 16) + (i2c_msg_head[7] << 24);
+	if (length > MAX_BUF_LENGTH) {
+		ts_err(dev, "buffer too long:%d > %d", length, MAX_BUF_LENGTH);
+		return -EINVAL;
+	}
+
+	databuf = kzalloc(length, GFP_KERNEL);
+	if (!databuf)
+		return -ENOMEM;
+
+	ret = copy_from_user(databuf, (u8 *)arg + I2C_MSG_HEAD_LEN, length);
+	if (ret) {
+		ret = -EFAULT;
+		ts_err(dev, "Copy data from user failed");
+		goto err_out;
+	}
+
+	if (hw_ops->write(ts_core, reg_addr, databuf, length)) {
+		ret = -EBUSY;
+		ts_err(dev, "Write data to device failed");
+	} else {
+		ret = length;
+	}
+
+err_out:
+	kfree(databuf);
+	return ret;
+}
+
+static int init_cfg_data(struct goodix_ts_core *cd,
+			 struct goodix_ic_config *cfg, void __user *arg)
+{
+	int ret = 0;
+	u32 length;
+	u8 i2c_msg_head[I2C_MSG_HEAD_LEN] = { 0 };
+	struct device *dev = cd->bus->dev;
+
+	ret = copy_from_user(&i2c_msg_head, arg, I2C_MSG_HEAD_LEN);
+	if (ret) {
+		ts_err(dev, "Copy data from user failed");
+		return -EFAULT;
+	}
+
+	length = i2c_msg_head[4] + (i2c_msg_head[5] << 8) +
+		 (i2c_msg_head[6] << 16) + (i2c_msg_head[7] << 24);
+	if (length > GOODIX_CFG_MAX_SIZE) {
+		ts_err(dev, "buffer too long:%d > %d", length, MAX_BUF_LENGTH);
+		return -EINVAL;
+	}
+	ret = copy_from_user(cfg->data, (u8 *)arg + I2C_MSG_HEAD_LEN, length);
+	if (ret) {
+		ts_err(dev, "Copy data from user failed");
+		return -EFAULT;
+	}
+	cfg->len = length;
+	return 0;
+}
+
+/**
+ * goodix_tools_ioctl - ioctl implementation
+ *
+ * @filp: Pointer to file opened
+ * @cmd: Ioctl opertion command
+ * @arg: Command data
+ * Returns >=0 - succeed, else failed
+ */
+static long goodix_tools_ioctl(struct file *filp, unsigned int cmd,
+			       unsigned long arg)
+{
+	int ret = 0;
+	struct goodix_ts_core *ts_core = filp->private_data;
+	const struct goodix_ts_hw_ops *hw_ops = ts_core->hw_ops;
+	struct goodix_ic_config *temp_cfg = NULL;
+	struct device *dev = ts_core->bus->dev;
+
+	if (_IOC_TYPE(cmd) != GOODIX_TS_IOC_MAGIC) {
+		ts_err(dev, "Bad magic num:%c", _IOC_TYPE(cmd));
+		return -ENOTTY;
+	}
+
+	switch (cmd & NEGLECT_SIZE_MASK) {
+	case GTP_IRQ_ENABLE:
+		if (arg == 1) {
+			hw_ops->irq_enable(ts_core, true);
+			ts_info(dev, "IRQ enabled");
+		} else if (arg == 0) {
+			hw_ops->irq_enable(ts_core, false);
+			ts_info(dev, "IRQ disabled");
+		} else {
+			ts_info(dev, "Irq aready set with, arg = %ld", arg);
+		}
+		ret = 0;
+		break;
+	case GTP_ESD_ENABLE:
+		if (arg == 0)
+			goodix_ts_esd_off(ts_core);
+		else
+			goodix_ts_esd_on(ts_core);
+		break;
+	case GTP_DEV_RESET:
+		hw_ops->reset(ts_core, GOODIX_NORMAL_RESET_DELAY_MS);
+		break;
+	case GTP_SEND_COMMAND:
+		/* deprecated command */
+		ts_err(dev, "the GTP_SEND_COMMAND function has been removed");
+		ret = -EINVAL;
+		break;
+	case GTP_SEND_CONFIG:
+		temp_cfg = kzalloc(sizeof(struct goodix_ic_config), GFP_KERNEL);
+		if (temp_cfg == NULL) {
+			ret = -ENOMEM;
+			goto err_out;
+		}
+
+		ret = init_cfg_data(ts_core, temp_cfg, (void __user *)arg);
+		if (!ret && hw_ops->send_config) {
+			ret = hw_ops->send_config(ts_core, temp_cfg->data,
+						  temp_cfg->len);
+			if (ret) {
+				ts_err(dev, "Failed send config");
+				ret = -EAGAIN;
+			} else {
+				ts_info(dev, "Send config success");
+				ret = 0;
+			}
+		}
+		kfree(temp_cfg);
+		temp_cfg = NULL;
+		break;
+	case GTP_READ_CONFIG:
+		ret = read_config_data(ts_core, (void __user *)arg);
+		if (ret > 0)
+			ts_info(dev, "success read config:len=%d", ret);
+		else
+			ts_err(dev, "failed read config:ret=0x%x", ret);
+		break;
+	case GTP_ASYNC_READ:
+		ret = async_read(ts_core, (void __user *)arg);
+		if (ret < 0)
+			ts_err(dev, "Async data read failed");
+		break;
+	case GTP_SYNC_READ:
+		ts_info(dev, "unsupport sync read");
+		break;
+	case GTP_ASYNC_WRITE:
+		ret = async_write(ts_core, (void __user *)arg);
+		if (ret < 0)
+			ts_err(dev, "Async data write failed");
+		break;
+	case GTP_TOOLS_VER:
+		ret = copy_to_user((u8 *)arg, &goodix_tools_ver, sizeof(u16));
+		if (ret)
+			ts_err(dev, "failed copy driver version info to user");
+		break;
+	case GTP_TOOLS_CTRL_SYNC:
+		ts_core->tools_ctrl_sync = !!arg;
+		ts_info(dev, "set tools ctrl sync %d", ts_core->tools_ctrl_sync);
+		break;
+	default:
+		ts_info(dev, "Invalid cmd");
+		ret = -ENOTTY;
+		break;
+	}
+
+err_out:
+	return ret;
+}
+
+#ifdef CONFIG_COMPAT
+static long goodix_tools_compat_ioctl(struct file *file, unsigned int cmd,
+				      unsigned long arg)
+{
+	void __user *arg32 = compat_ptr(arg);
+
+	if (!file->f_op || !file->f_op->unlocked_ioctl)
+		return -ENOTTY;
+	return file->f_op->unlocked_ioctl(file, cmd, (unsigned long)arg32);
+}
+#endif
+
+static int goodix_tools_open(struct inode *inode, struct file *filp)
+{
+	struct goodix_ts_core *cd =
+		container_of(inode->i_cdev, struct goodix_ts_core, tool_cdev);
+	struct device *dev = cd->bus->dev;
+
+	filp->private_data = cd;
+	goodix_ts_esd_off(cd);
+	ts_info(dev, "success open tools");
+	return 0;
+}
+
+static int goodix_tools_release(struct inode *inode, struct file *filp)
+{
+	struct goodix_ts_core *cd = filp->private_data;
+	struct device *dev = cd->bus->dev;
+
+	cd->tools_ctrl_sync = false;
+	goodix_ts_esd_on(cd);
+	ts_info(dev, "tools released");
+	return 0;
+}
+
+static const struct file_operations goodix_tools_fops = {
+	.owner = THIS_MODULE,
+	.open = goodix_tools_open,
+	.release = goodix_tools_release,
+	.unlocked_ioctl = goodix_tools_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = goodix_tools_compat_ioctl,
+#endif
+};
+
+/**
+ * goodix_tools_init - init goodix tools device with cdev + class + device
+ *
+ * return: 0 success, else failed
+ */
+int goodix_tools_init(struct goodix_ts_core *cd)
+{
+	struct device *parent = cd->bus->dev;
+	struct device *dev;
+	int ret;
+
+	if (cd->pdev->id == 0)
+		snprintf(cd->tool_dev_name, sizeof(cd->tool_dev_name),
+			 "%s", GOODIX_TOOLS_NAME);
+	else
+		snprintf(cd->tool_dev_name, sizeof(cd->tool_dev_name),
+			 "%s.%d", GOODIX_TOOLS_NAME, cd->pdev->id);
+
+	ret = alloc_chrdev_region(&cd->tool_devno, 0, 1, cd->tool_dev_name);
+	if (ret) {
+		ts_err(parent, "failed alloc chrdev region, ret %d", ret);
+		return ret;
+	}
+
+	if (!goodix_tools_class) {
+#if (KERNEL_VERSION(6, 4, 0) <= LINUX_VERSION_CODE)
+		goodix_tools_class = class_create(GOODIX_TOOLS_NAME);
+#else
+		goodix_tools_class = class_create(THIS_MODULE, GOODIX_TOOLS_NAME);
+#endif
+		if (IS_ERR(goodix_tools_class)) {
+			ret = PTR_ERR(goodix_tools_class);
+			goodix_tools_class = NULL;
+			ts_err(parent, "failed create class, ret %d", ret);
+			goto err_class;
+		}
+	}
+
+	cdev_init(&cd->tool_cdev, &goodix_tools_fops);
+	cd->tool_cdev.owner = THIS_MODULE;
+	ret = cdev_add(&cd->tool_cdev, cd->tool_devno, 1);
+	if (ret) {
+		ts_err(parent, "failed add cdev %s, ret %d",
+		       cd->tool_dev_name, ret);
+		goto err_cdev;
+	}
+
+	dev = device_create(goodix_tools_class, parent, cd->tool_devno,
+			    NULL, cd->tool_dev_name);
+	if (IS_ERR(dev)) {
+		ret = PTR_ERR(dev);
+		ts_err(parent, "failed create device %s, ret %d",
+		       cd->tool_dev_name, ret);
+		goto err_device;
+	}
+
+	ts_info(parent, "tools cdev %s registered", cd->tool_dev_name);
+	return 0;
+
+err_device:
+	cdev_del(&cd->tool_cdev);
+err_cdev:
+	/* only destroy class when no other instance is using it */
+	class_destroy(goodix_tools_class);
+	goodix_tools_class = NULL;
+err_class:
+	unregister_chrdev_region(cd->tool_devno, 1);
+	return ret;
+}
+
+void goodix_tools_exit(struct goodix_ts_core *cd)
+{
+	struct device *dev = cd->bus->dev;
+
+	device_destroy(goodix_tools_class, cd->tool_devno);
+	cdev_del(&cd->tool_cdev);
+	class_destroy(goodix_tools_class);
+	goodix_tools_class = NULL;
+	unregister_chrdev_region(cd->tool_devno, 1);
+	ts_info(dev, "tools cdev %s unregistered", cd->tool_dev_name);
+}

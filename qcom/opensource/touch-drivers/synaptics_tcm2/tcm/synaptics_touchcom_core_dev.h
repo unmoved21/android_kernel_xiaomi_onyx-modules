@@ -78,6 +78,8 @@ extern "C" {
 #define PROTOCOL_BYPASS_STARTUP_PACKET (0x80)
 
 /* Common capability defaults */
+#define TVM_PANEL_MAX_X 1439
+#define TVM_PANEL_MAX_Y 3199
 #define MAX_NUM_OBJECTS (10)
 
 #define MAX_SIZE_GESTURE_DATA (8)

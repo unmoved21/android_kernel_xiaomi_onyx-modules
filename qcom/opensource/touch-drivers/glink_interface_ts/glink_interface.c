@@ -32,7 +32,7 @@ int glink_touch_tx_msg(void  *msg, size_t len)
 
 	touch_pdev->message = msg;
 	touch_pdev->message_length = len;
-	if (touch_pdev->message) {
+	if (touch_pdev->message && touch_pdev->channel) {
 		ret = rpmsg_send(touch_pdev->channel,
 			touch_pdev->message, touch_pdev->message_length);
 		if (ret)
