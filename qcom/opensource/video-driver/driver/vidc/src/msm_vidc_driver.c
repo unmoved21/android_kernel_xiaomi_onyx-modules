@@ -4139,10 +4139,6 @@ void msm_vidc_print_core_info(struct msm_vidc_core *core)
 	}
 
 	max_supported_instances = core->capabilities[MAX_SESSION_COUNT].value;
-	if (max_supported_instances > MAX_SUPPORTED_INSTANCES) {
-		d_vpr_e("%s: invalid number of instances\n", __func__);
-		return;
-	}
 
 	instances = vzalloc(max_supported_instances * sizeof(struct msm_vidc_inst *));
 	if (!instances) {
@@ -4166,6 +4162,7 @@ void msm_vidc_print_core_info(struct msm_vidc_core *core)
 		inst_unlock(inst, __func__);
 		put_inst(inst);
 	}
+	vfree(instances);
 }
 
 int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,

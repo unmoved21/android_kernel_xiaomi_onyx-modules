@@ -53,7 +53,7 @@
 #define HEIC    MSM_VIDC_HEIC
 #define CODECS_ALL     (H264 | HEVC | VP9 | HEIC | AV1)
 #define MAXIMUM_OVERRIDE_VP9_FPS 200
-#define MAX_SESSION_COUNT_IOT 24
+#define MAX_SESSION_COUNT_IOT 32
 
 static struct codec_info codec_data_sun[] = {
 	{
@@ -2849,11 +2849,11 @@ static const struct subcache_table sun_subcache_table[] = {
 
 /* name, start, size, secure, dma_coherant, region, dma_mask */
 const struct context_bank_table sun_context_bank_table[] = {
-	{"qcom,vidc,cb-ns",             0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE,       0 },
-	{"qcom,vidc,cb-ns-pxl",         0x00100000, 0xdff00000, 0, 1, MSM_VIDC_NON_SECURE_PIXEL, 0 },
-	{"qcom,vidc,cb-sec-pxl",        0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_PIXEL,     0 },
-	{"qcom,vidc,cb-sec-non-pxl",    0x01000000, 0x24800000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
-	{"qcom,vidc,cb-sec-bitstream",  0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_BITSTREAM, 0 },
+	{"qcom,vidc,cb-ns",            0x25800000, 0xba800000, 0, 1, MSM_VIDC_NON_SECURE,       0 },
+	{"qcom,vidc,cb-ns-pxl",        0x00100000, 0xdff00000, 0, 1, MSM_VIDC_NON_SECURE_PIXEL, 0 },
+	{"qcom,vidc,cb-sec-pxl",       0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_PIXEL,     0 },
+	{"qcom,vidc,cb-sec-non-pxl",   0x01400000, 0x24400000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
+	{"qcom,vidc,cb-sec-bitstream", 0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_BITSTREAM, 0 },
 };
 
 /* freq */
@@ -3110,6 +3110,8 @@ static int msm_vidc_init_data(struct msm_vidc_core *core)
 
 		core_cap_data =
 			(struct msm_platform_core_capability *)core->platform->data.core_data;
+		/* 16 MB firmware with support for 32 concurrent sessions */
+		core->platform->data.fwname = "vpu35_16mb_4v";
 		for (i = 0; i < num_core_cap_data; i++) {
 			if (core_cap_data[i].type == MAX_SESSION_COUNT)
 				core_cap_data[i].value = MAX_SESSION_COUNT_IOT;

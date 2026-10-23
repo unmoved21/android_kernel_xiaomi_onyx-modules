@@ -52,7 +52,7 @@
 #define HEIC    MSM_VIDC_HEIC
 #define CODECS_ALL     (H264 | HEVC | VP9 | HEIC | AV1)
 #define MAXIMUM_OVERRIDE_VP9_FPS 200
-#define MAX_SESSION_COUNT_IOT 24
+#define MAX_SESSION_COUNT_IOT 32
 
 static struct codec_info codec_data_kera[] = {
 	{
@@ -4339,7 +4339,7 @@ const struct context_bank_table kera_context_bank_table[] = {
 	{"qcom,vidc,cb-sec-pxl",
 		0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_PIXEL,     0 },
 	{"qcom,vidc,cb-sec-non-pxl",
-		0x01000000, 0x24800000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
+		0x01400000, 0x24400000, 1, 0, MSM_VIDC_SECURE_NONPIXEL,  0 },
 	{"qcom,vidc,cb-sec-bitstream",
 		0x00500000, 0xdfb00000, 1, 0, MSM_VIDC_SECURE_BITSTREAM, 0 },
 };
@@ -4708,15 +4708,11 @@ static int msm_vidc_init_data(struct msm_vidc_core *core)
 
 		core_cap_data =
 			(struct msm_platform_core_capability *)core->platform->data.core_data;
+		/* 16 MB firmware with support for 32 concurrent sessions */
+		core->platform->data.fwname = "vpu30_16mb_2v";
 		for (i = 0; i < num_core_cap_data; i++) {
 			if (core_cap_data[i].type == MAX_SESSION_COUNT)
 				core_cap_data[i].value = MAX_SESSION_COUNT_IOT;
-			else if (core_cap_data[i].type == MAX_NUM_720P_SESSIONS)
-				core_cap_data[i].value = MAX_SESSION_COUNT_IOT;
-			else if (core_cap_data[i].type == MAX_NUM_1080P_SESSIONS)
-				core_cap_data[i].value = MAX_SESSION_COUNT_IOT;
-			else if (core_cap_data[i].type == MAX_MBPF)
-				core_cap_data[i].value = 195840;    /* (24 * ((1920x1088)/256))*/
 		}
 	}
 

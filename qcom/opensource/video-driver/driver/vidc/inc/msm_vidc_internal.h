@@ -102,7 +102,7 @@ enum msm_vidc_metadata_bits {
 #define MAXIMUM_VP9_FPS   60
 #define NRT_PRIORITY_OFFSET        2
 #define RT_DEC_DOWN_PRORITY_OFFSET 1
-#define MAX_SUPPORTED_INSTANCES  24
+#define MAX_SUPPORTED_INSTANCES  16
 #define DEFAULT_BSE_VPP_DELAY    2
 #define MAX_CAP_PARENTS          20
 #define MAX_CAP_CHILDREN         25
