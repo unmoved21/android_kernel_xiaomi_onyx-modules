@@ -890,6 +890,8 @@ struct fastrpc_user {
 	atomic_t state;
 	/* Flag to indicate notif thread exit requested */
 	bool exit_notif;
+	struct kref refcount;
+	struct work_struct put_work;
 };
 
 struct fastrpc_ctrl_latency {
@@ -952,4 +954,30 @@ void fastrpc_ssr_dspsignal_cancel_wait(struct fastrpc_user *fl);
 
 /* Function to clean all SMMU mappings associated with a fastrpc user obj */
 void fastrpc_free_user(struct fastrpc_user *fl);
+
+/*
+ * fastrpc_file_get - Take a reference on the fastrpc user object
+ *
+ * Increments the reference count for the specified fastrpc user object
+ * if it is non-zero, ensuring safe access.
+ *
+ * @fl: Pointer to the fastrpc_user structure.
+ *
+ * @return: 0 on success, or -ENOENT if the object is already being freed.
+ */
+int fastrpc_file_get(struct fastrpc_user *fl);
+
+/*
+ * fastrpc_file_put - Release reference to the fastrpc user object
+ *
+ * Decrements the reference count for the specified fastrpc user object.
+ * If the reference count drops to zero, the corresponding resources are
+ * released.
+ *
+ * @fl: Pointer to the fastrpc_user structure.
+ * @worker: If true, schedules the release callback in a worker thread
+ *          (safe from interrupt context); otherwise decrements directly.
+ */
+void fastrpc_file_put(struct fastrpc_user *fl, bool worker);
+
 #endif /* __FASTRPC_SHARED_H__ */
