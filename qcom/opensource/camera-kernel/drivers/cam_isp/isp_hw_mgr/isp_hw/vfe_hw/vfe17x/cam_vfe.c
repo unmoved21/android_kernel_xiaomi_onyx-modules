@@ -1,47 +1,92 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
+#if IS_ENABLED(CONFIG_ARCH_NAPALI)
 #include "cam_vfe170.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_TALOS)
 #include "cam_vfe170_150.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_NILE)
 #include "cam_vfe175.h"
 #include "cam_vfe175_130.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KONA)
 #include "cam_vfe480.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SHIMA)
 #include "cam_vfe570.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_LAHAINA)
 #include "cam_vfe580.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_CHORA)
+#include "cam_tfe662.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_WAIPIO)
 #include "cam_vfe680.h"
 #include "cam_vfe680_110.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KALAMA)
 #include "cam_vfe780.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_PINEAPPLE)
 #include "cam_vfe880.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SUN)
 #include "cam_tfe980.h"
 #include "cam_tfe975.h"
 #include "cam_tfe970.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_CANOE)
 #include "cam_tfe1080.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_NAPALI) || IS_ENABLED(CONFIG_ARCH_NILE)
 #include "cam_vfe_lite17x.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KONA) || IS_ENABLED(CONFIG_ARCH_SHIMA) || IS_ENABLED(CONFIG_ARCH_LAHAINA)
 #include "cam_vfe_lite48x.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_WAIPIO)
 #include "cam_vfe_lite68x.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KALAMA)
 #include "cam_vfe_lite78x.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_PINEAPPLE)
 #include "cam_vfe_lite88x.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SUN)
 #include "cam_vfe_lite98x.h"
 #include "cam_vfe_lite97x.h"
+#endif
+#if IS_ENABLED(CONFIG_ARCH_CANOE)
 #include "cam_vfe_lite108x.h"
+#endif
 #include "cam_vfe_hw_intf.h"
 #include "cam_vfe_core.h"
 #include "cam_vfe_dev.h"
 #include "camera_main.h"
+#include "cam_vfe.h"
 
 static const struct of_device_id cam_vfe_dt_match[] = {
+#if IS_ENABLED(CONFIG_ARCH_NAPALI)
 	{
 		.compatible = "qcom,vfe170",
 		.data = &cam_vfe170_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_TALOS)
 	{
 		.compatible = "qcom,vfe170_150",
 		.data = &cam_vfe170_150_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_NILE)
 	{
 		.compatible = "qcom,vfe175",
 		.data = &cam_vfe175_hw_info,
@@ -50,18 +95,32 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,vfe175_130",
 		.data = &cam_vfe175_130_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KONA)
 	{
 		.compatible = "qcom,vfe480",
 		.data = &cam_vfe480_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SHIMA)
 	{
 		.compatible = "qcom,vfe570",
 		.data = &cam_vfe570_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_LAHAINA)
 	{
 		.compatible = "qcom,vfe580",
 		.data = &cam_vfe580_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_CHORA)
+	{
+		.compatible = "qcom,mc_tfe662",
+		.data  = &cam_tfe662_hw_info,
+	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_WAIPIO)
 	{
 		.compatible = "qcom,vfe680",
 		.data = &cam_vfe680_hw_info,
@@ -70,14 +129,20 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,vfe680_110",
 		.data = &cam_vfe680_110_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KALAMA)
 	{
 		.compatible = "qcom,vfe780",
 		.data = &cam_vfe780_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_PINEAPPLE)
 	{
 		.compatible = "qcom,vfe880",
 		.data = &cam_vfe880_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SUN)
 	{
 		.compatible = "qcom,mc_tfe980",
 		.data  = &cam_tfe980_hw_info,
@@ -90,10 +155,14 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,mc_tfe975",
 		.data  = &cam_tfe975_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_CANOE)
 	{
 		.compatible = "qcom,mc_tfe1080",
 		.data  = &cam_tfe1080_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_NAPALI) || IS_ENABLED(CONFIG_ARCH_NILE)
 	{
 		.compatible = "qcom,vfe-lite170",
 		.data = &cam_vfe_lite17x_hw_info,
@@ -102,6 +171,8 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,vfe-lite175",
 		.data = &cam_vfe_lite17x_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KONA) || IS_ENABLED(CONFIG_ARCH_SHIMA) || IS_ENABLED(CONFIG_ARCH_LAHAINA)
 	{
 		.compatible = "qcom,vfe-lite480",
 		.data = &cam_vfe_lite48x_hw_info,
@@ -114,6 +185,8 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,vfe-lite580",
 		.data = &cam_vfe_lite48x_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_WAIPIO)
 	{
 		.compatible = "qcom,vfe-lite680",
 		.data = &cam_vfe_lite68x_hw_info,
@@ -122,14 +195,20 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,vfe-lite680_110",
 		.data = &cam_vfe_lite68x_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_KALAMA)
 	{
 		.compatible = "qcom,vfe-lite780",
 		.data = &cam_vfe_lite78x_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_PINEAPPLE)
 	{
 		.compatible = "qcom,vfe-lite880",
 		.data = &cam_vfe_lite88x_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SUN)
 	{
 		.compatible = "qcom,vfe-lite980",
 		.data = &cam_vfe_lite98x_hw_info,
@@ -142,10 +221,13 @@ static const struct of_device_id cam_vfe_dt_match[] = {
 		.compatible = "qcom,vfe-lite975",
 		.data = &cam_vfe_lite97x_hw_info,
 	},
+#endif
+#if IS_ENABLED(CONFIG_ARCH_CANOE)
 	{
 		.compatible = "qcom,vfe-lite1080",
 		.data = &cam_vfe_lite108x_hw_info,
 	},
+#endif
 	{}
 };
 MODULE_DEVICE_TABLE(of, cam_vfe_dt_match);

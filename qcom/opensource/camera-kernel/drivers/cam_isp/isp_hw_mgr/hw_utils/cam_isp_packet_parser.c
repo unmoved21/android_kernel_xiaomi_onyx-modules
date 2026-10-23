@@ -195,10 +195,17 @@ static int cam_isp_update_dual_config(
 		goto put_ref;
 	}
 
+	size_t stripe_total;
+
 	dual_config = (struct cam_isp_dual_config *)cpu_addr_local;
-	if ((dual_config->num_ports *
-		sizeof(struct cam_isp_dual_stripe_config)) >
-		(remain_len - offsetof(struct cam_isp_dual_config, stripes))) {
+	if (packet_size < offsetof(struct cam_isp_dual_config, stripes) ||
+		check_mul_overflow(
+			(size_t)dual_config->num_ports,
+			(size_t)(CAM_ISP_HW_SPLIT_MAX * CAM_PACKET_MAX_PLANES *
+			sizeof(struct cam_isp_dual_stripe_config)),
+			&stripe_total) ||
+		(stripe_total >
+			(packet_size - offsetof(struct cam_isp_dual_config, stripes)))) {
 		CAM_ERR(CAM_ISP, "not enough buffer for all the dual configs");
 		rc = -EINVAL;
 		goto end;

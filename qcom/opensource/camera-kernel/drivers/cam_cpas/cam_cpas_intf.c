@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/of.h>
@@ -30,6 +30,10 @@
 #include "cam_vmrm_interface.h"
 #include "cam_mem_mgr_api.h"
 #include "cam_req_mgr_dev.h"
+#if IS_ENABLED(CONFIG_ARCH_CANOE)
+#include "cpastop_v1080_100.h"
+#endif
+
 
 #if defined(CONFIG_DYNAMIC_FD_PORT_CONFIG) || defined(CONFIG_SPECTRA_SECURE_DYN_PORT_CFG)
 #include <linux/IClientEnv.h>
@@ -2140,7 +2144,16 @@ static int cam_cpas_dev_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id cam_cpas_dt_match[] = {
-	{.compatible = "qcom,cam-cpas"},
+	{
+		.compatible = "qcom,cam-cpas",
+		.data = NULL,
+	},
+#if IS_ENABLED(CONFIG_ARCH_CANOE)
+	{
+		.compatible = "qcom,cam-cpas1080",
+		.data = &cam1080_cpas100_hw_info,
+	},
+#endif
 	{}
 };
 

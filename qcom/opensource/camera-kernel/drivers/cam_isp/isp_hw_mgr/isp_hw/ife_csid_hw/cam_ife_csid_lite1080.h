@@ -1,10 +1,18 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _CAM_IFE_CSID_LITE_1080_H_
 #define _CAM_IFE_CSID_LITE_1080_H_
+
+#include <linux/module.h>
+#include "cam_ife_csid_dev.h"
+#include "camera_main.h"
+#include "cam_ife_csid_common.h"
+#include "cam_ife_csid_hw_ver2.h"
+#include "cam_irq_controller.h"
+#include "cam_isp_hw_mgr_intf.h"
 
 static const struct cam_ife_csid_irq_desc cam_ife_csid_lite_1080_rx_irq_desc[][32] = {
 	{

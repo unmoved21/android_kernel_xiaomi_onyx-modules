@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/uaccess.h>
@@ -3341,6 +3341,7 @@ static void cam_icp_mgr_process_dbg_buf(struct cam_icp_hw_mgr *hw_mgr)
 	uint32_t pre_buf_word_size = 0;
 	uint64_t timestamp = 0;
 	char *msg_data;
+	uint32_t *dbg_buf = NULL;
 	int rc = 0;
 
 	if (!hw_mgr) {
@@ -3348,31 +3349,43 @@ static void cam_icp_mgr_process_dbg_buf(struct cam_icp_hw_mgr *hw_mgr)
 		return;
 	}
 
+	dbg_buf = CAM_MEM_ZALLOC_ARRAY(ICP_DBG_BUF_SIZE_IN_WORDS, sizeof(uint32_t), GFP_KERNEL);
+	if (!dbg_buf) {
+		CAM_ERR(CAM_ICP, "%s Failed to allocate dbg_buf", hw_mgr->hw_mgr_name);
+		return;
+	}
+
 	do {
 		rc = hfi_read_message(hw_mgr->hfi_handle,
-			hw_mgr->dbg_buf + (pre_remain_len >> BYTE_WORD_SHIFT),
+			dbg_buf + (pre_remain_len >> BYTE_WORD_SHIFT),
 			Q_DBG, buf_word_size, &read_in_words);
 		if (rc)
-			break;
+			goto free_buf;
 
 		remain_len = pre_remain_len + (read_in_words << BYTE_WORD_SHIFT);
 		pre_remain_len = 0;
 		pre_buf_word_size = buf_word_size;
-		msg_ptr = (uint32_t *)hw_mgr->dbg_buf;
+		msg_ptr = (uint32_t *)dbg_buf;
 		buf_word_size = ICP_DBG_BUF_SIZE_IN_WORDS;
 
 		while (remain_len) {
 			pkt_ptr = msg_ptr;
 
-			if (remain_len >= (ICP_DBG_BUF_SIZE_IN_WORDS << BYTE_WORD_SHIFT) ||
-				(pkt_ptr >= hw_mgr->dbg_buf + ICP_DBG_BUF_SIZE_IN_WORDS) ||
+			if (pkt_ptr >= dbg_buf + ICP_DBG_BUF_SIZE_IN_WORDS) {
+				CAM_WARN(CAM_ICP,
+					"Error message: pkt_ptr:%p overflows assigned memory for dbg_buf: %p",
+					pkt_ptr, dbg_buf);
+				goto free_buf;
+			}
+
+			if (remain_len > (ICP_DBG_BUF_SIZE_IN_WORDS << BYTE_WORD_SHIFT) ||
 				(pkt_ptr[ICP_PACKET_TYPE] != HFI_MSG_SYS_DEBUG)) {
 				CAM_WARN(CAM_ICP,
 					"Error message: remain_len:%u, dbg_buf:%p pkt_ptr:%p pkt_size:%u pkt_type:0x%x read_in_words:%d",
-					remain_len, hw_mgr->dbg_buf, pkt_ptr,
+					remain_len, dbg_buf, pkt_ptr,
 					pkt_ptr[ICP_PACKET_SIZE], pkt_ptr[ICP_PACKET_TYPE],
 					read_in_words);
-				return;
+				goto free_buf;
 			}
 
 			if (remain_len < pkt_ptr[ICP_PACKET_SIZE]) {
@@ -3382,7 +3395,7 @@ static void cam_icp_mgr_process_dbg_buf(struct cam_icp_hw_mgr *hw_mgr)
 				 * the remain data to start of buffer and shift buffer ptr to
 				 * after the remaining data ends to read from queue.
 				 */
-				memcpy(hw_mgr->dbg_buf, msg_ptr, remain_len);
+				memcpy(dbg_buf, msg_ptr, remain_len);
 				pre_remain_len = remain_len;
 				buf_word_size -= (pre_remain_len >> BYTE_WORD_SHIFT);
 				break;
@@ -3409,6 +3422,9 @@ static void cam_icp_mgr_process_dbg_buf(struct cam_icp_hw_mgr *hw_mgr)
 
 	/* Repeat reading if drain buffer is insufficient to read all MSGs at once */
 	} while (read_in_words >= pre_buf_word_size);
+
+free_buf:
+	CAM_MEM_FREE(dbg_buf);
 }
 
 static int cam_icp_process_msg_pkt_type(
@@ -8317,6 +8333,10 @@ static int cam_icp_get_acquire_info_v1(struct cam_icp_hw_mgr *hw_mgr,
 		return -EFAULT;
 	}
 
+	acquire_info->secure_mode = icp_dev_acquire_info.secure_mode;
+	acquire_info->num_out_res = icp_dev_acquire_info.num_out_res;
+	acquire_info->dev_type = icp_dev_acquire_info.dev_type;
+
 	acquire_size_unified = sizeof(struct cam_icp_acquire_dev_info_unified) +
 		((icp_dev_acquire_info.num_out_res) *
 		sizeof(struct cam_icp_res_info_unified));
@@ -8446,6 +8466,10 @@ static int cam_icp_get_acquire_info_v2(struct cam_icp_hw_mgr *hw_mgr,
 		CAM_MEM_FREE(acquire_info);
 		return -EFAULT;
 	}
+
+	acquire_info->secure_mode = icp_dev_acquire_info_v2.secure_mode;
+	acquire_info->num_out_res = icp_dev_acquire_info_v2.num_out_res;
+	acquire_info->dev_type = icp_dev_acquire_info_v2.dev_type;
 
 	acquire_size_unified = sizeof(struct cam_icp_acquire_dev_info_unified) +
 		((icp_dev_acquire_info_v2.num_out_res) *

@@ -8116,8 +8116,9 @@ static int __cam_isp_ctx_allocate_mem_hw_entries(
 			goto end;
 		}
 
-		ctx_isp->req_isp[i].deferred_fence_map_index = kcalloc(param->total_ports_acq,
-			sizeof(uint32_t), GFP_KERNEL);
+		ctx_isp->req_isp[i].deferred_fence_map_index =
+			CAM_MEM_ZALLOC_ARRAY(param->total_ports_acq,
+				sizeof(uint32_t), GFP_KERNEL);
 		if (!ctx_isp->req_isp[i].deferred_fence_map_index) {
 			CAM_ERR(CAM_ISP, "%s[%d] no memory for defer fence map idx arr, ports:%u",
 				ctx->dev_name, ctx->ctx_id, param->total_ports_acq);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/slab.h>
@@ -51,6 +51,9 @@ struct cam_vfe_top_ver4_priv {
 	struct cam_vfe_top_ver4_prim_sof_ts_reg_addr sof_ts_reg_addr;
 	bool                                         enable_ife_frame_irqs;
 	uint64_t                                     diag_config_debug_val_0;
+	uint32_t                                     capable_res_mask;
+	uint32_t                                     acquired_res_mask;
+	void                                        *vfe_irq_controller;
 };
 
 enum cam_vfe_top_ver4_fsm_state {
@@ -80,7 +83,6 @@ struct cam_vfe_mux_ver4_data {
 	int                                  irq_err_handle;
 	int                                  frame_irq_handle;
 	int                                  sof_irq_handle;
-	void                                *vfe_irq_controller;
 	struct cam_vfe_top_irq_evt_payload   evt_payload[CAM_VFE_CAMIF_EVT_MAX];
 	struct list_head                     free_payload_list;
 	spinlock_t                           spin_lock;
@@ -1192,13 +1194,20 @@ config_done:
 	return rc;
 }
 
-int cam_vfe_top_ver4_reserve(void *device_priv,
+static int cam_vfe_res_mux_init(struct cam_vfe_top_ver4_priv *top_priv,
+	struct cam_hw_intf *hw_intf, struct cam_hw_soc_info *soc_info,
+	void *vfe_hw_info, struct cam_isp_resource_node *vfe_res);
+
+static int cam_vfe_res_mux_deinit(struct cam_isp_resource_node *vfe_res);
+
+static int cam_vfe_top_ver4_reserve(void *device_priv,
 	void *reserve_args, uint32_t arg_size)
 {
 	struct cam_vfe_top_ver4_priv            *top_priv;
 	struct cam_vfe_acquire_args             *args;
 	struct cam_vfe_hw_vfe_in_acquire_args   *acquire_args;
 	struct cam_vfe_mux_ver4_data            *vfe_priv = NULL;
+	struct cam_vfe_ver4_path_hw_info        *path_hw_info;
 	uint32_t i;
 	int rc = -EINVAL;
 
@@ -1217,6 +1226,15 @@ int cam_vfe_top_ver4_reserve(void *device_priv,
 
 	for (i = 0; i < top_priv->top_common.num_mux; i++) {
 		if (top_priv->top_common.mux_rsrc[i].res_id == acquire_args->res_id) {
+			if (!(top_priv->capable_res_mask & BIT(i))) {
+				CAM_ERR(CAM_ISP,
+					"VFE:%u res %s (slot %u) not supported on this core",
+					top_priv->common_data.hw_intf->hw_idx,
+					top_priv->top_common.mux_rsrc[i].res_name, i);
+				rc = -EINVAL;
+				break;
+			}
+
 			vfe_priv = (struct cam_vfe_mux_ver4_data *)
 				top_priv->top_common.mux_rsrc[i].res_priv;
 
@@ -1250,14 +1268,43 @@ int cam_vfe_top_ver4_reserve(void *device_priv,
 				break;
 			}
 
+			/* First acquire for this resource: allocate and init the path data */
+			if (acquire_args->res_id == CAM_ISP_HW_VFE_IN_CAMIF)
+				path_hw_info = &top_priv->common_data.hw_info->vfe_full_hw_info;
+			else if (acquire_args->res_id == CAM_ISP_HW_VFE_IN_PDLIB)
+				path_hw_info = &top_priv->common_data.hw_info->pdlib_hw_info;
+			else
+				path_hw_info = &top_priv->common_data.hw_info->rdi_hw_info[
+					acquire_args->res_id - CAM_ISP_HW_VFE_IN_RDI0];
+
+			rc = cam_vfe_res_mux_init(top_priv,
+				top_priv->common_data.hw_intf,
+				top_priv->top_common.soc_info,
+				path_hw_info,
+				&top_priv->top_common.mux_rsrc[i]);
+			if (rc) {
+				CAM_ERR(CAM_ISP, "VFE:%u res %s mux init failed rc=%d",
+					top_priv->common_data.hw_intf->hw_idx,
+					top_priv->top_common.mux_rsrc[i].res_name, rc);
+				break;
+			}
+
+			top_priv->acquired_res_mask |= BIT(i);
+
+			vfe_priv = (struct cam_vfe_mux_ver4_data *)
+				top_priv->top_common.mux_rsrc[i].res_priv;
+
 			if (((acquire_args->res_id == CAM_ISP_HW_VFE_IN_CAMIF) ||
 				(acquire_args->res_id >= CAM_ISP_HW_VFE_IN_RDI0)) &&
 				(acquire_args->res_id < CAM_ISP_HW_VFE_IN_MAX)) {
 				rc = cam_vfe_top_acquire_resource(
 					&top_priv->top_common.mux_rsrc[i],
 					args);
-				if (rc)
+				if (rc) {
+					cam_vfe_res_mux_deinit(&top_priv->top_common.mux_rsrc[i]);
+					top_priv->acquired_res_mask &= ~BIT(i);
 					break;
+				}
 			}
 
 			/* Acquire ownership */
@@ -1266,6 +1313,8 @@ int cam_vfe_top_ver4_reserve(void *device_priv,
 			if (rc) {
 				CAM_ERR(CAM_ISP, "VFE[%u] acquire ownership failed",
 					top_priv->common_data.hw_intf->hw_idx);
+				cam_vfe_res_mux_deinit(&top_priv->top_common.mux_rsrc[i]);
+				top_priv->acquired_res_mask &= ~BIT(i);
 				break;
 			}
 
@@ -1291,6 +1340,7 @@ int cam_vfe_top_ver4_release(void *device_priv,
 	void *release_args, uint32_t arg_size)
 {
 	int rc = 0;
+	uint32_t i;
 	struct cam_isp_resource_node            *mux_res;
 	struct cam_vfe_top_ver4_priv            *top_priv;
 	struct cam_vfe_mux_ver4_data            *vfe_priv = NULL;
@@ -1314,7 +1364,6 @@ int cam_vfe_top_ver4_release(void *device_priv,
 
 	memset(&vfe_priv->top_priv->sof_ts_reg_addr, 0,
 		sizeof(vfe_priv->top_priv->sof_ts_reg_addr));
-	vfe_priv->hw_ctxt_mask = 0;
 	mux_res->res_state = CAM_ISP_RESOURCE_STATE_AVAILABLE;
 
 	rc = cam_vmrm_soc_release_resources(
@@ -1322,6 +1371,15 @@ int cam_vfe_top_ver4_release(void *device_priv,
 	if (rc) {
 		CAM_ERR(CAM_ISP, "VFE[%u] vmrm soc release resources failed",
 			top_priv->common_data.hw_intf->hw_idx);
+	}
+
+	/* Find the slot index and free the path data */
+	for (i = 0; i < top_priv->top_common.num_mux; i++) {
+		if (&top_priv->top_common.mux_rsrc[i] == mux_res) {
+			cam_vfe_res_mux_deinit(mux_res);
+			top_priv->acquired_res_mask &= ~BIT(i);
+			break;
+		}
 	}
 
 	return rc;
@@ -1789,7 +1847,7 @@ static int cam_vfe_top_ver4_update_sof_debug(
 	mux_data->enable_sof_irq_debug = enable_sof_irq;
 	if (mux_data->sof_irq_handle)
 		cam_irq_controller_update_irq(
-			mux_data->vfe_irq_controller,
+			mux_data->top_priv->vfe_irq_controller,
 			mux_data->sof_irq_handle,
 			enable_sof_irq, sof_irq_mask);
 	return 0;
@@ -2379,7 +2437,7 @@ static int cam_vfe_ver4_err_irq_top_half(
 		CAM_ERR(CAM_ISP, "Stopping further IRQ processing from VFE:%u",
 			vfe_res->hw_intf->hw_idx);
 		cam_irq_controller_disable_all(
-			vfe_priv->vfe_irq_controller);
+			vfe_priv->top_priv->vfe_irq_controller);
 		error_flag = true;
 	}
 
@@ -2505,7 +2563,7 @@ skip_core_cfg:
 
 	if (!rsrc_data->frame_irq_handle) {
 		rsrc_data->frame_irq_handle = cam_irq_controller_subscribe_irq(
-			rsrc_data->vfe_irq_controller,
+			rsrc_data->top_priv->vfe_irq_controller,
 			CAM_IRQ_PRIORITY_1,
 			irq_mask,
 			vfe_res,
@@ -2528,7 +2586,7 @@ skip_frame_irq_subscribe:
 	if (!rsrc_data->frame_irq_handle) {
 		/* SOF IRQ mask is set to 0 intentially at resource start */
 		rsrc_data->sof_irq_handle = cam_irq_controller_subscribe_irq(
-			rsrc_data->vfe_irq_controller,
+			rsrc_data->top_priv->vfe_irq_controller,
 			CAM_IRQ_PRIORITY_1,
 			sof_irq_mask,
 			vfe_res,
@@ -2548,7 +2606,7 @@ skip_frame_irq_subscribe:
 
 	if (!rsrc_data->irq_err_handle) {
 		rsrc_data->irq_err_handle = cam_irq_controller_subscribe_irq(
-			rsrc_data->vfe_irq_controller,
+			rsrc_data->top_priv->vfe_irq_controller,
 			CAM_IRQ_PRIORITY_0,
 			err_irq_mask,
 			vfe_res,
@@ -2614,7 +2672,7 @@ skip_core_decfg:
 
 	if (vfe_priv->frame_irq_handle) {
 		cam_irq_controller_unsubscribe_irq(
-			vfe_priv->vfe_irq_controller,
+			vfe_priv->top_priv->vfe_irq_controller,
 			vfe_priv->frame_irq_handle);
 		vfe_priv->frame_irq_handle = 0;
 	}
@@ -2622,14 +2680,14 @@ skip_core_decfg:
 
 	if (vfe_priv->sof_irq_handle) {
 		cam_irq_controller_unsubscribe_irq(
-			vfe_priv->vfe_irq_controller,
+			vfe_priv->top_priv->vfe_irq_controller,
 			vfe_priv->sof_irq_handle);
 		vfe_priv->sof_irq_handle = 0;
 	}
 
 	if (vfe_priv->irq_err_handle) {
 		cam_irq_controller_unsubscribe_irq(
-			vfe_priv->vfe_irq_controller,
+			vfe_priv->top_priv->vfe_irq_controller,
 			vfe_priv->irq_err_handle);
 		vfe_priv->irq_err_handle = 0;
 	}
@@ -2721,13 +2779,18 @@ int cam_vfe_res_mux_init(
 	struct cam_hw_intf            *hw_intf,
 	struct cam_hw_soc_info        *soc_info,
 	void                          *vfe_hw_info,
-	struct cam_isp_resource_node  *vfe_res,
-	void                          *vfe_irq_controller)
+	struct cam_isp_resource_node  *vfe_res)
 {
 	struct cam_vfe_mux_ver4_data           *vfe_priv = NULL;
 	struct cam_vfe_ver4_path_hw_info       *hw_info = vfe_hw_info;
 	struct cam_vfe_soc_private    *soc_priv = soc_info->soc_private;
 	int i;
+
+	if (!hw_info) {
+		CAM_ERR(CAM_ISP, "VFE:%u res %s invalid hw_info",
+			hw_intf->hw_idx, vfe_res->res_name);
+		return -EINVAL;
+	}
 
 	vfe_priv = CAM_MEM_ZALLOC(sizeof(struct cam_vfe_mux_ver4_data),
 		GFP_KERNEL);
@@ -2741,7 +2804,6 @@ int cam_vfe_res_mux_init(
 	vfe_priv->hw_intf     = hw_intf;
 	vfe_priv->is_lite     = soc_priv->is_ife_lite;
 	vfe_priv->soc_info    = soc_info;
-	vfe_priv->vfe_irq_controller = vfe_irq_controller;
 	vfe_priv->is_pixel_path = (vfe_res->res_id == CAM_ISP_HW_VFE_IN_CAMIF);
 	vfe_priv->top_priv     = top_priv;
 
@@ -2845,48 +2907,28 @@ int cam_vfe_top_ver4_init(
 		top_priv->top_common.req_clk_rate[i] = 0;
 
 		if (hw_info->mux_type[i] == CAM_VFE_CAMIF_VER_4_0) {
-			top_priv->top_common.mux_rsrc[i].res_id =
-				CAM_ISP_HW_VFE_IN_CAMIF;
-
-			rc = cam_vfe_res_mux_init(top_priv,
-				hw_intf, soc_info,
-				&hw_info->vfe_full_hw_info,
-				&top_priv->top_common.mux_rsrc[i],
-				vfe_irq_controller);
+			top_priv->top_common.mux_rsrc[i].res_id = CAM_ISP_HW_VFE_IN_CAMIF;
+			top_priv->capable_res_mask |= BIT(i);
 			scnprintf(top_priv->top_common.mux_rsrc[i].res_name,
 				CAM_ISP_RES_NAME_LEN, "CAMIF");
 		} else if (hw_info->mux_type[i] ==
 			CAM_VFE_PDLIB_VER_1_0) {
 			/* set the PDLIB resource id */
-			top_priv->top_common.mux_rsrc[i].res_id =
-				CAM_ISP_HW_VFE_IN_PDLIB;
-
-			rc = cam_vfe_res_mux_init(top_priv,
-				hw_intf, soc_info,
-				&hw_info->pdlib_hw_info,
-				&top_priv->top_common.mux_rsrc[i],
-				vfe_irq_controller);
+			top_priv->top_common.mux_rsrc[i].res_id = CAM_ISP_HW_VFE_IN_PDLIB;
+			top_priv->capable_res_mask |= BIT(i);
 			scnprintf(top_priv->top_common.mux_rsrc[i].res_name,
 				CAM_ISP_RES_NAME_LEN, "PDLIB");
 		} else if (hw_info->mux_type[i] ==
 			CAM_VFE_RDI_VER_1_0 && j < hw_info->num_rdi) {
 			/* set the RDI resource id */
-			top_priv->top_common.mux_rsrc[i].res_id =
-				CAM_ISP_HW_VFE_IN_RDI0 + j;
-
+			top_priv->top_common.mux_rsrc[i].res_id = CAM_ISP_HW_VFE_IN_RDI0 + j++;
+			top_priv->capable_res_mask |= BIT(i);
 			scnprintf(top_priv->top_common.mux_rsrc[i].res_name,
-				CAM_ISP_RES_NAME_LEN, "RDI_%d", j);
-			rc = cam_vfe_res_mux_init(top_priv,
-				hw_intf, soc_info,
-				&hw_info->rdi_hw_info[j++],
-				&top_priv->top_common.mux_rsrc[i],
-				vfe_irq_controller);
+				CAM_ISP_RES_NAME_LEN, "RDI_%d", j - 1);
 		} else {
 			CAM_WARN(CAM_ISP, "VFE:%u Invalid mux type: %u",
 				hw_intf->hw_idx, hw_info->mux_type[i]);
 		}
-		if (rc)
-			goto deinit_resources;
 	}
 
 
@@ -2907,36 +2949,17 @@ int cam_vfe_top_ver4_init(
 	top_priv->common_data.hw_intf      = hw_intf;
 	top_priv->top_common.hw_idx        = hw_intf->hw_idx;
 	top_priv->common_data.common_reg   = hw_info->common_reg;
+	top_priv->vfe_irq_controller       = vfe_irq_controller;
 
 	if (top_priv->common_data.common_reg->num_perf_counters > CAM_VFE_PERF_CNT_MAX) {
 		CAM_ERR(CAM_ISP, "Invalid number of perf counters: %d max: %d",
 			top_priv->common_data.common_reg->num_perf_counters,
 			CAM_VFE_PERF_CNT_MAX);
 		rc = -EINVAL;
-		goto deinit_resources;
+		goto free_top_priv;
 	}
 
 	return rc;
-
-deinit_resources:
-
-	for (--i; i >= 0; i--) {
-		if (hw_info->mux_type[i] == CAM_VFE_CAMIF_VER_4_0) {
-			if (cam_vfe_res_mux_deinit(
-				&top_priv->top_common.mux_rsrc[i]))
-				CAM_ERR(CAM_ISP, "VFE:%u Camif Deinit failed", hw_intf->hw_idx);
-		} else {
-			if (cam_vfe_res_mux_deinit(
-				&top_priv->top_common.mux_rsrc[i]))
-				CAM_ERR(CAM_ISP,
-					"VFE:%u Camif lite res id %d Deinit failed",
-					hw_intf->hw_idx, top_priv->top_common.mux_rsrc[i]
-					.res_id);
-		}
-		top_priv->top_common.mux_rsrc[i].res_state =
-			CAM_ISP_RESOURCE_STATE_UNAVAILABLE;
-	}
-
 
 free_top_priv:
 	CAM_MEM_FREE(vfe_top->top_priv);
@@ -2973,6 +2996,9 @@ int cam_vfe_top_ver4_deinit(struct cam_vfe_top  **vfe_top_ptr)
 	for (i = 0; i < top_priv->top_common.num_mux; i++) {
 		top_priv->top_common.mux_rsrc[i].res_state =
 			CAM_ISP_RESOURCE_STATE_UNAVAILABLE;
+		if (!(top_priv->acquired_res_mask & BIT(i)))
+			continue;
+
 		rc = cam_vfe_res_mux_deinit(&top_priv->top_common.mux_rsrc[i]);
 		if (rc)
 			CAM_ERR(CAM_ISP, "VFE:%u Mux[%d] deinit failed rc=%d",

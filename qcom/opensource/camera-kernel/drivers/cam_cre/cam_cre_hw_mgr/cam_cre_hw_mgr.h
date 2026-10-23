@@ -32,8 +32,8 @@
 #define CRE_CTX_STATE_ACQUIRED       2
 #define CRE_CTX_STATE_RELEASE        3
 
-#define CRE_MAX_IN_RES               2
-#define CRE_MAX_OUT_RES              2
+#define CRE_MAX_IN_RES               1
+#define CRE_MAX_OUT_RES              1
 #define CRE_MAX_IO_BUFS              3
 
 #define CAM_CRE_BW_CONFIG_UNKNOWN    0

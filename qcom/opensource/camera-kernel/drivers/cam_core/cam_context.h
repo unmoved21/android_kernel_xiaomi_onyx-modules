@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _CAM_CONTEXT_H_
@@ -28,8 +28,7 @@ struct cam_context;
 // END: FeatureAutoEQ
 
 /* max request number */
-#define CAM_CTX_REQ_MAX              20
-#define CAM_CTX_ICP_REQ_MAX          40
+#define CAM_CTX_REQ_MAX              8
 #define CAM_CTX_CFG_MAX              20
 #define CAM_CTX_RES_MAX              20
 

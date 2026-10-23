@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _CAM_MEM_MGR_H_
@@ -17,6 +17,8 @@
 #endif
 #include <media/cam_req_mgr.h>
 #include "cam_mem_mgr_api.h"
+
+#define MEM_OWNER_DESC_SIZE 100
 
 /* Enum for possible mem mgr states */
 enum cam_mem_mgr_state {
@@ -34,6 +36,15 @@ enum cam_mem_mgr_allocator {
 enum cam_smmu_mapping_client {
 	CAM_SMMU_MAPPING_USER,
 	CAM_SMMU_MAPPING_KERNEL,
+};
+
+/*Enum for heap memory trace support */
+enum cam_mem_trace_cmd {
+	CAM_MEM_TRACE_OVERVIEW,
+	CAM_MEM_TRACE_FULL_QUERY,
+	CAM_MEM_TRACE_SEDENTARY_QUERY,
+	CAM_MEM_TRACE_MASS_MEM_QUERY,
+	CAM_MEM_TRACE_MAX
 };
 
 #ifdef CONFIG_CAM_PRESIL
@@ -78,6 +89,71 @@ enum cam_dma_heap_type {
 	CAM_SVM_HEAP_DEVICE,
 	CAM_SVM_HEAP_SESSION,
 	CAM_HEAP_MAX,
+};
+
+/**
+ * struct cam_mem_heap_trace
+ *
+ * @trace_list:           List to hold headers of allocated heap memories.
+ * @record_page_list:     List to hold pages which record the life cycles for
+ *                        massive heap memories.
+ * @lock:                 Spin lock to protect lists and total_trace_mem.
+ * @total_trace_mem:      Total bytes of allocated heap memories.
+ * @page_count:           Count to limit the max num of record pages.
+ * @trace_premise:        Premise to enable the memory trace.
+ */
+struct cam_mem_heap_trace {
+	struct list_head trace_list;
+	struct list_head record_page_list;
+	spinlock_t lock;
+	size_t total_trace_mem;
+	uint32_t page_count;
+	bool trace_premise;
+};
+
+/**
+ * struct cam_mem_trace_header
+ *
+ * @magic:     Magic number to prevent illegal memory access
+ * @list:      List member used to append this node to a memory list
+ * @size:      Size of allocated memory
+ * @flags:     GFP flags (GFP_KERNEL, GFP_DMA, GFP_ATOMIC etc)
+ * @mem_owner: owner to which allocated memory belongs
+ * @vaddr_ptr: Kernel virtual address of allocated memory
+ * @timestamp: Timestamp of memory allocation. Got via ktime_get
+ */
+struct cam_mem_trace_header {
+	uint32_t         magic;
+	struct list_head list;
+	size_t           size;
+	gfp_t            flags;
+	char             mem_owner[MEM_OWNER_DESC_SIZE];
+	void            *vaddr_ptr;
+	ktime_t          timestamp;
+};
+
+/**
+ * struct cam_mem_trace_footer
+ *
+ * @magic:  Magic number to prevent illegal memory access
+ */
+struct cam_mem_trace_footer {
+	uint32_t         magic;
+};
+
+/**
+ * struct cam_mem_trace_record_page
+ *
+ * @list:   List member used to append this node to a memory list
+ * @size:   Size of the record page
+ * @offset: Write offset of the record page
+ * @full:   Flag to indicate if the record page is full
+ */
+struct cam_mem_trace_record_page {
+	struct list_head list;
+	size_t           size;
+	size_t           offset;
+	bool             full;
 };
 
 /**
@@ -138,23 +214,29 @@ struct cam_mem_buf_queue {
 	spinlock_t idx_lock;
 };
 
+/* Buffer queue chunk allocation - currently starts with two chunk */
+#define CAM_BUFQ_CHUNK_SIZE   1024
+#define CAM_BUFQ_MAX_CHUNKS   ((CAM_MEM_BUFQ_MAX) / (CAM_BUFQ_CHUNK_SIZE))
+
 /**
  * struct cam_mem_table
  *
  * @m_lock: mutex lock for table
  * @bitmap: bitmap of the mem mgr utility
- * @bits: max bits of the utility
- * @bufq: array of buffers
+ * @bufq: array of chunk pointers; each chunk is allocated on demand
+ * @buf_smmu_hdls: Slab cache for per-slot hdls_info arrays
+ * @bufq_capacity: current total number of buffer queue slots allocated
  * @dbg_buf_idx: debug buffer index to get usecases info
+ * @max_hdls_info_size: Size of the hdls array allocated per buffer,
+ *                      computed value to be used in driver
+ * @chunk_slot_cnt: active slot count per chunk; chunk freed when it hits zero
  * @max_hdls_supported: Maximum number of SMMU device handles supported
  *                      A buffer can only be mapped for these number of
  *                      device context banks
- * @max_hdls_info_size: Size of the hdls array allocated per buffer,
- *                      computed value to be used in driver
+ * @csf_version: Camera security framework version
  * @force_cache_allocs: Force all internal buffer allocations with cache
  * @need_shared_buffer_padding: Whether padding is needed for shared buffer
  *                              allocations.
- * @csf_version: Camera security framework version
  * @system_heap: Handle to system heap
  * @system_movable_heap: Handle to system movable heap
  * @system_uncached_heap: Handle to system uncached heap
@@ -163,27 +245,29 @@ struct cam_mem_buf_queue {
  * @secure_display_heap: Handle to secure display heap
  * @ubwc_p_heap: Handle to ubwc-p heap
  * @ubwc_p_movable_heap: Handle to ubwc-p movable heap
- * @cam_device_heap:     Handle of svm device heap
- * @cam_session_heap:    Handle of svm session heap
- * @cam_device_mem_pool_handle:  Handle of device memory pool
+ * @cam_device_heap: Handle of svm device heap
+ * @cam_session_heap: Handle of svm session heap
+ * @cam_device_mem_pool_handle: Handle of device memory pool
  * @cam_session_mem_pool_handle: Handle of session memory pool
- * @device_heap_alloc_cnt:       Buffer count alloc from device heap
- * @session_heap_alloc_cnt:      Buffer count alloc from session heap
- * @device_heap_size:            Device pool size
- * @session_heap_size:           Session pool size
+ * @device_heap_alloc_cnt: Buffer count alloc from device heap
+ * @session_heap_alloc_cnt: Buffer count alloc from session heap
+ * @device_heap_size: Device pool size
+ * @session_heap_size: Session pool size
  *
  */
 struct cam_mem_table {
 	struct mutex m_lock;
 	void *bitmap;
-	size_t bits;
-	struct cam_mem_buf_queue bufq[CAM_MEM_BUFQ_MAX];
+	struct cam_mem_buf_queue *bufq[CAM_BUFQ_MAX_CHUNKS];
+	struct kmem_cache *buf_smmu_hdls;
+	size_t bufq_capacity;
 	size_t dbg_buf_idx;
-	int32_t max_hdls_supported;
 	size_t max_hdls_info_size;
+	atomic_t chunk_slot_cnt[CAM_BUFQ_MAX_CHUNKS];
+	int32_t max_hdls_supported;
+	struct cam_csf_version csf_version;
 	bool force_cache_allocs;
 	bool need_shared_buffer_padding;
-	struct cam_csf_version csf_version;
 #if IS_REACHABLE(CONFIG_DMABUF_HEAPS)
 	struct dma_heap *system_heap;
 	struct dma_heap *system_movable_heap;
@@ -204,7 +288,6 @@ struct cam_mem_table {
 	uint32_t session_heap_size;
 #endif
 #endif
-
 };
 
 /**

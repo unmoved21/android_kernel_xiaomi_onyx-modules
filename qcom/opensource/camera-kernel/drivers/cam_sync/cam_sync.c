@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/init.h>
@@ -114,7 +114,8 @@ static int cam_sync_create_util(
 
 		/* Association refcnt for non-import cases */
 		if (dma_sync_create_info->sync_created_with_dma) {
-			rc = cam_dma_fence_get_put_ref(true, row->dma_fence_info.dma_fence_row_idx);
+			rc = cam_dma_fence_get_put_ref(true,
+				row->dma_fence_info.dma_fence_row_idx, NULL);
 			if (rc)
 				CAM_ERR(CAM_SYNC,
 					"Failed to getref on dma fence idx: %u fd: %d sync_obj: %d rc: %d",
@@ -1161,7 +1162,7 @@ static int cam_generic_fence_alloc_validate_input_info_util(
 		return -EINVAL;
 	}
 
-	fence_input = memdup_user(u64_to_user_ptr(fence_cmd_args->input_handle),
+	fence_input = CAM_MEMDUP_USER(u64_to_user_ptr(fence_cmd_args->input_handle),
 		fence_cmd_args->input_data_size);
 	if (IS_ERR_OR_NULL(fence_input)) {
 		CAM_ERR(CAM_SYNC, "memdup failed for hdl: %d size: 0x%x",
@@ -1356,7 +1357,7 @@ static int cam_generic_fence_handle_dma_import(
 			fence_cfg->reason_code = rc;
 
 			/* put on the import refcnt */
-			cam_dma_fence_get_put_ref(false, dma_fence_row_idx);
+			cam_dma_fence_get_put_ref(false, dma_fence_row_idx, fence);
 			goto out_copy;
 		}
 
@@ -1474,7 +1475,7 @@ static int cam_generic_fence_validate_signal_input_info_util(
 		return -EINVAL;
 	}
 
-	signal_info = memdup_user(u64_to_user_ptr(fence_cmd_args->input_handle),
+	signal_info = CAM_MEMDUP_USER(u64_to_user_ptr(fence_cmd_args->input_handle),
 		fence_cmd_args->input_data_size);
 	if (IS_ERR_OR_NULL(signal_info)) {
 		CAM_ERR(CAM_SYNC, "memdup failed for hdl: %d size: 0x%x",
@@ -1522,7 +1523,7 @@ static int cam_generic_fence_validate_signal_input_info_util(
 		goto free_mem;
 	}
 
-	signal_data = memdup_user(u64_to_user_ptr(signal_info->fence_info_hdl),
+	signal_data = CAM_MEMDUP_USER(u64_to_user_ptr(signal_info->fence_info_hdl),
 		signal_info->fence_data_size);
 	if (IS_ERR_OR_NULL(signal_data)) {
 		CAM_ERR(CAM_SYNC, "memdup failed for hdl: %d size: 0x%x",
