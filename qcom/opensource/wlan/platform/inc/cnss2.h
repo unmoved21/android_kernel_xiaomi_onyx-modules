@@ -9,6 +9,14 @@
 
 #include <linux/pci.h>
 #include "cnss_utils.h"
+#ifdef CONFIG_SDIO_QCN
+#include <linux/mmc/sdio_func.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "qcn_sdio_al.h"
+#else
+#include <linux/qcn_sdio_al.h>
+#endif
+#endif
 
 #define CNSS_MAX_FILE_NAME		20
 #define CNSS_MAX_TIMESTAMP_LEN		32
@@ -125,6 +133,28 @@ struct cnss_uevent_data {
 	enum cnss_driver_status status;
 	void *data;
 };
+
+#ifdef CONFIG_SDIO_QCN
+struct cnss_sdio_wlan_driver {
+	const char *name;
+	const struct sdio_device_id *id_table;
+	int (*probe)(struct sdio_func *, const struct sdio_device_id *);
+	void (*remove)(struct sdio_func *);
+	int (*reinit)(struct sdio_func *, const struct sdio_device_id *);
+	void (*shutdown)(struct sdio_func *);
+	void (*crash_shutdown)(struct sdio_func *);
+	int (*suspend)(struct device *);
+	int (*resume)(struct device *);
+	int (*runtime_suspend)(struct device *);
+	int (*runtime_resume)(struct device *);
+	void (*update_status)(struct sdio_func *, enum cnss_driver_status status);
+	int  (*update_event)(struct sdio_func *, struct cnss_uevent_data *uevent);
+	int (*idle_shutdown)(struct sdio_func *);
+	int (*idle_restart)(struct sdio_func *);
+	int (*set_therm_cdev_state)(struct sdio_func *sdio_func,
+				    unsigned long thermal_state, int tcdev_id);
+};
+#endif
 
 struct cnss_wlan_driver {
 	char *name;
@@ -375,4 +405,91 @@ extern void cnss_get_cpumask_for_wlan_tx_comp_interrupts(struct device *dev,
 extern int cnss_set_cxpc(struct device *dev, enum cxpc_status arg);
 extern int cnss_pci_get_iova_info(struct device *dev, u64 *addr, u64 *size);
 extern int cnss_set_vendor_wonder_priv_data(const void *priv_data);
+extern bool cnss_get_napi_ipi_redirect_enabled(struct device *dev);
+
+#ifdef CONFIG_SDIO_QCN
+extern int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *driver_ops);
+extern void cnss_sdio_wlan_unregister_driver(struct cnss_sdio_wlan_driver *driver_ops);
+extern struct sdio_al_client_handle *cnss_sdio_wlan_get_sdio_al_client_handle(
+						       struct sdio_func *func);
+extern struct sdio_al_channel_handle *cnss_sdio_wlan_register_sdio_al_channel(
+				    struct sdio_al_channel_data *channel_data);
+extern void cnss_sdio_wlan_unregister_sdio_al_channel(
+	     struct sdio_al_channel_handle *ch_handle);
+extern int cnss_sdio_wlan_enable_subsys(void);
+extern int cnss_sdio_wlan_disable_subsys(void);
+extern int cnss_sdio_wlan_time_sync(void);
+extern void cnss_fw_ready_ind_event(struct device *dev);
+extern int cnss_sdio_get_soc_info(struct cnss_soc_info *soc_info);
+extern u64 cnss_get_tsf_irq_ts(struct device *dev);
+extern int cnss2_sdio_force_fw_assert(struct device *dev);
+extern int cnss_wlan_gpio_register(void);
+extern int cnss_wlan_gpio_deregister(void);
+extern int cnss2_sdio_thermal_cdev_register(struct device *dev,
+					unsigned long max_state, int mon_id);
+#else
+static inline int cnss_sdio_wlan_register_driver(void *driver_ops)
+{
+	return 0;
+}
+
+static inline void cnss_sdio_wlan_unregister_driver(void *driver_ops)
+{
+}
+
+static inline void *cnss_sdio_wlan_get_sdio_al_client_handle(void *func)
+{
+	return NULL;
+}
+
+static inline void *cnss_sdio_wlan_register_sdio_al_channel(void *channel_data)
+{
+	return NULL;
+}
+
+static inline void cnss_sdio_wlan_unregister_sdio_al_channel(void *ch_handle)
+{
+}
+
+static inline int cnss_sdio_wlan_time_sync(void)
+{
+	return 0;
+}
+
+static inline void cnss_fw_ready_ind_event(struct device *dev)
+{
+}
+
+static inline u64 cnss_get_tsf_irq_ts(struct device *dev)
+{
+	return 0;
+}
+
+static inline int cnss_sdio_get_soc_info(struct cnss_soc_info *soc_info)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int cnss2_sdio_force_fw_assert(struct device *dev)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int cnss_wlan_gpio_register(void)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int cnss_wlan_gpio_deregister(void)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int cnss2_sdio_thermal_cdev_register(struct device *dev,
+					unsigned long max_state, int mon_id)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_SDIO_QCN */
+
 #endif /* _NET_CNSS2_H */

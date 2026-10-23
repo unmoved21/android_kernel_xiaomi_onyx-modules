@@ -18,6 +18,7 @@
 #if IS_ENABLED(CONFIG_INTERCONNECT)
 #include <linux/interconnect.h>
 #endif
+#include <linux/ktime.h>
 #include <linux/mailbox_client.h>
 #include <linux/pm_qos.h>
 #include <linux/of.h>
@@ -92,6 +93,7 @@
 #define WLFW_MAX_HANG_EVENT_DATA_SIZE   384
 #define CNSS_MBOX_MSG_MAX_LEN           64
 #define CNSS_IOMMU_NODE_NAME_MAX_LEN    50
+#define POWER_RESET_MIN_DELAY_MS	100
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -454,6 +456,7 @@ enum cnss_debug_quirks {
 	FORCE_ONE_MSI,
 	PREVENT_PCI_LINK_RESUME,
 	CNSS_INTERNAL_RESUME,
+	DISABLE_CALDB_RDDM_REUSE,
 	QUIRK_MAX_VALUE
 };
 
@@ -462,6 +465,13 @@ enum cnss_bdf_type {
 	CNSS_BDF_ELF,
 	CNSS_BDF_REGDB = 4,
 	CNSS_BDF_HDS = 6,
+};
+
+/* board_id source, controlled by qcom,board-id-src DT. */
+enum cnss_board_id_src {
+	CNSS_BOARD_ID_SRC_FW       = 0,
+	CNSS_BOARD_ID_SRC_PCIE_MAP = 1,
+	CNSS_BOARD_ID_SRC_MAX,
 };
 
 enum cnss_cal_status {
@@ -641,6 +651,8 @@ enum cnss_power_ctrl_mode {
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
 	enum cnss_driver_mode driver_mode;
+	u64 wlan_on_time_usec;
+	u64 wlan_off_time_usec;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;
@@ -792,6 +804,7 @@ struct cnss_plat_data {
 	struct wlchip_serial_id_v01 serial_id;
 	u32 cpumask_for_rx_intrs;
 	u32 cpumask_for_tx_comp_intrs;
+	bool napi_ipi_redirect_enable;
 	bool ipa_shared_cb_enable;
 	struct task_struct *cnss_event_work_task;
 	u64 pcie_time_sync_offset;
@@ -800,6 +813,7 @@ struct cnss_plat_data {
 	bool pm_suspend_in_progress;
 	struct notifier_block pm_notifier;
 	char bdfname_dt[MAX_FIRMWARE_NAME_LEN];
+	enum cnss_board_id_src board_id_src;
 	struct cnss_xo_trim_config xo_trim_conf;
 	struct cnss_xdump_helper xdump_helper;
 	int direct_cx_data_pin_mode;
@@ -818,12 +832,14 @@ struct cnss_plat_data {
 	struct cnss_wlan_host_param *host_param;
 	struct cnss_wlan_tsf_info tsf_info;
 	bool m2_supply_detected;
+	bool msix_supported;
 	bool rc_pm_control;
 	enum cx_modes cx_mode;
 	u32 pmic_auto_headroom;
 	u32 wake_voltage_drop_adjustment;
 	u32 sleep_voltage_drop_adjustment;
 	enum cnss_power_ctrl_mode pwr_ctrl_mode;
+	u32 bdf_dnld_fail_count;
 };
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
@@ -850,6 +866,19 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+/**
+ * cnss_get_monotonic_boottime_us() - get monotonic boottime in microseconds
+ *
+ * Uses CLOCK_BOOTTIME (via ktime_get_boottime()) rather than CLOCK_MONOTONIC
+ * so that the returned value includes any time spent in system suspend.
+ *
+ * Return: current boottime in microseconds
+ */
+static inline u64 cnss_get_monotonic_boottime_us(void)
+{
+	return ktime_to_us(ktime_get_boottime());
+}
+
 int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv);
 int cnss_wlan_hw_enable(void);
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
@@ -862,6 +891,7 @@ struct cnss_plat_data *cnss_get_plat_env(int index);
 void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv);
 void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv);
 void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv);
+void cnss_get_caldb_rddm_reuse_info(struct cnss_plat_data *plat_priv);
 bool cnss_is_dual_wlan_enabled(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,

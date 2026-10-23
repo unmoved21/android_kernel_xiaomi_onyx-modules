@@ -94,6 +94,7 @@ static struct icnss_clk_cfg icnss_adrestea_clk_list[] = {
 
 #define SW_CTRL_GPIO			"pin_sw-ctrl-gpio"
 #define WLAN_EN_GPIO			"pin_wlan-en-gpio"
+#define BT_EN_GPIO			"pin_bt-en-gpio"
 #define PIN_CTRL			"pin-ctrl-support"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
@@ -699,12 +700,16 @@ int icnss_get_pinctrl(struct icnss_priv *priv)
 	dev = &priv->pdev->dev;
 	pinctrl_info = &priv->pinctrl_info;
 
-	if (of_property_read_bool(dev->of_node, PIN_CTRL)) {
-		gpio_id = of_get_named_gpio(dev->of_node, SW_CTRL_GPIO, 0);
-		pinctrl_info->sw_ctrl_gpio = gpio_id;
-		icnss_pr_dbg("Switch control GPIO: %d\n",
-			     pinctrl_info->sw_ctrl_gpio);
+	pinctrl_info->sw_ctrl_gpio = of_get_named_gpio(dev->of_node, SW_CTRL_GPIO, 0);
+	icnss_pr_dbg("Switch control GPIO: %d\n", pinctrl_info->sw_ctrl_gpio);
 
+	pinctrl_info->wlan_en_gpio = of_get_named_gpio(dev->of_node, WLAN_EN_GPIO, 0);
+	icnss_pr_dbg("WLAN_EN GPIO: %d\n", pinctrl_info->wlan_en_gpio);
+
+	pinctrl_info->bt_en_gpio = of_get_named_gpio(dev->of_node, BT_EN_GPIO, 0);
+	icnss_pr_dbg("BT_EN GPIO: %d\n", pinctrl_info->bt_en_gpio);
+
+	if (of_property_read_bool(dev->of_node, PIN_CTRL)) {
 		pinctrl_info->pinctrl = devm_pinctrl_get(dev);
 		if (IS_ERR_OR_NULL(pinctrl_info->pinctrl)) {
 			ret = PTR_ERR(pinctrl_info->pinctrl);
@@ -727,10 +732,6 @@ int icnss_get_pinctrl(struct icnss_priv *priv)
 					     ret);
 		}
 
-		pinctrl_info->wlan_en_gpio = of_get_named_gpio(dev->of_node,
-							       WLAN_EN_GPIO, 0);
-		icnss_pr_dbg("WLAN_EN GPIO: %d\n", pinctrl_info->wlan_en_gpio);
-
 		pinctrl_info->wlan_en_active =
 			pinctrl_lookup_state(pinctrl_info->pinctrl, WLAN_EN_ACTIVE);
 
@@ -747,9 +748,6 @@ int icnss_get_pinctrl(struct icnss_priv *priv)
 			icnss_pr_err("Failed to get wlan_en sleep state, err = %d\n",
 				     ret);
 		}
-	} else {
-		pinctrl_info->sw_ctrl_gpio = -EINVAL;
-		pinctrl_info->wlan_en_gpio = -EINVAL;
 	}
 
 	/* Find out and configure all those GPIOs which need to be setup

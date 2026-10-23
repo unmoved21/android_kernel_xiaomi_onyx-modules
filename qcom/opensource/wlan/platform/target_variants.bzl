@@ -6,6 +6,7 @@ targets = [
     "canoe",
     "chora",
     "gen3auto",
+    "glymur",
     "hamoa",
     "hamoa_la",
     "lahaina",
@@ -16,6 +17,7 @@ targets = [
     "seraph",
     "shikra",
     "sun",
+    "waipio",
     "vienna",
 ]
 
@@ -38,7 +40,9 @@ lv_variants = [
 le_targets = [
     # keep sorted
     "alor-le",
+    "pebble-le",
     "sun-allyes",
+    "vienna-le",
 ]
 
 le_32_targets = [
@@ -68,6 +72,7 @@ vm_types = [
 vm_target_bases = [
     "sun",
     "canoe",
+    "glymur",
     "hamoa",
     "hamoa_la",
 ]

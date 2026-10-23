@@ -228,3 +228,10 @@ config CNSS_SHUTDOWN_CALLBACK
 	  called and then cnss_remove be called. If target or system disabled
 	  IOMMU during shutdown and PCIe required this feature, then enabled
 	  it.
+
+config CNSS2_BDF_RETRY
+	bool "Enable BDF segment retry on QMI download failure"
+	depends on CNSS2
+	help
+	  Retry failed BDF QMI download segments before giving up.
+	  Enable for platforms that require this recovery.

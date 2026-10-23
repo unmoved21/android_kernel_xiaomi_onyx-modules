@@ -287,4 +287,5 @@ extern int icnss_register_driver_async_data_cb(struct device *dev, void *cb_ctx,
 extern struct kobject *icnss_get_wifi_kobj(struct device *dev);
 extern bool icnss_get_fw_cap(struct device *dev, enum icnss_fw_caps fw_cap);
 extern int icnss_get_iova_info(struct device *dev, u64 *addr, u64 *size);
+extern int icnss_set_vendor_wonder_priv_data(const void *priv_data);
 #endif /* _ICNSS_WLAN_H_ */

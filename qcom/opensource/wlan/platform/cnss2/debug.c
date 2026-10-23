@@ -901,6 +901,12 @@ static int cnss_show_quirks_state(struct seq_file *s,
 		case PREVENT_PCI_LINK_RESUME:
 			seq_puts(s, "PREVENT_PCI_LINK_RESUME");
 			continue;
+		case CNSS_INTERNAL_RESUME:
+			seq_puts(s, "CNSS_INTERNAL_RESUME");
+			continue;
+		case DISABLE_CALDB_RDDM_REUSE:
+			seq_puts(s, "DISABLE_CALDB_RDDM_REUSE");
+			continue;
 		default:
 			continue;
 		}

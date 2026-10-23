@@ -15,6 +15,7 @@
 #include <linux/vmalloc.h>
 #include <linux/suspend.h>
 #include <linux/sched.h>
+#include <linux/version.h>
 #include <linux/nmi.h>
 #include <linux/stacktrace.h>
 #include "main.h"
@@ -124,6 +125,17 @@ static DEFINE_SPINLOCK(time_sync_lock);
 
 #define SECOND_DRIVER_SUB_NAME          "cnss2"
 
+/*
+ * struct mhi_channel_config.auto_queue was removed upstream in kernel
+ * v7.0.0. Wrap each struct-literal site with this macro instead of a
+ * repeated inline #if guard.
+ */
+#if (KERNEL_VERSION(7, 0, 0) > LINUX_VERSION_CODE)
+#define CNSS_MHI_AUTO_QUEUE(val) .auto_queue = (val),
+#else
+#define CNSS_MHI_AUTO_QUEUE(val)
+#endif
+
 static const struct mhi_channel_config cnss_mhi_channels[] = {
 	{
 		.num = 0,
@@ -137,7 +149,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 1,
@@ -151,7 +163,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 4,
@@ -165,7 +177,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 5,
@@ -179,7 +191,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 20,
@@ -193,7 +205,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 21,
@@ -207,7 +219,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = true,
+		CNSS_MHI_AUTO_QUEUE(true)
 	},
 /* All MHI satellite config to be at the end of data struct */
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
@@ -223,7 +235,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 51,
@@ -237,7 +249,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 70,
@@ -251,7 +263,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 71,
@@ -265,7 +277,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 #endif
 };
@@ -283,7 +295,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 1,
@@ -297,7 +309,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 20,
@@ -311,7 +323,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 21,
@@ -325,7 +337,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = true,
+		CNSS_MHI_AUTO_QUEUE(true)
 	},
 /* All MHI satellite config to be at the end of data struct */
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
@@ -341,7 +353,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 51,
@@ -355,7 +367,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 70,
@@ -369,7 +381,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 71,
@@ -383,7 +395,7 @@ static const struct mhi_channel_config cnss_mhi_channels_no_diag[] = {
 		.lpm_notify = false,
 		.offload_channel = true,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 #endif
 };
@@ -401,7 +413,7 @@ static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 1,
@@ -415,7 +427,7 @@ static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 4,
@@ -429,7 +441,7 @@ static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 5,
@@ -443,7 +455,7 @@ static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 16,
@@ -457,7 +469,7 @@ static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = false,
+		CNSS_MHI_AUTO_QUEUE(false)
 	},
 	{
 		.num = 17,
@@ -471,7 +483,7 @@ static const struct mhi_channel_config cnss_mhi_channels_genoa[] = {
 		.lpm_notify = false,
 		.offload_channel = false,
 		.doorbell_mode_switch = false,
-		.auto_queue = true,
+		CNSS_MHI_AUTO_QUEUE(true)
 	},
 };
 
@@ -1037,7 +1049,8 @@ static int cnss_mhi_device_get_sync_atomic(struct cnss_pci_data *pci_priv,
 }
 
 #if defined(CONFIG_CNSS2_SMMU_DB_SUPPORT) && \
-    (LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0))
+    ((LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0)) || \
+     (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)))
 static int cnss_mhi_host_notify_db_disable_trace(struct cnss_pci_data *pci_priv)
 {
 	return mhi_host_notify_db_disable_trace(pci_priv->mhi_ctrl);
@@ -1103,7 +1116,8 @@ static int cnss_mhi_device_get_sync_atomic(struct cnss_pci_data *pci_priv,
 }
 
 #if defined(CONFIG_CNSS2_SMMU_DB_SUPPORT) && \
-    (LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0))
+    ((LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0)) || \
+     (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)))
 static int cnss_mhi_host_notify_db_disable_trace(struct cnss_pci_data *pci_priv)
 {
 	return -EOPNOTSUPP;
@@ -1268,7 +1282,8 @@ void cnss_pci_controller_set_base(struct cnss_pci_data *pci_priv)
 	return cnss_mhi_controller_set_base(pci_priv, 0);
 }
 #if defined(CONFIG_CNSS2_SMMU_DB_SUPPORT) && \
-    (LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0))
+    ((LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0)) || \
+     (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)))
 #define CNSS_MHI_WAKE_TIMEOUT		500000
 
 static void cnss_record_smmu_fault_timestamp(struct cnss_pci_data *pci_priv,
@@ -1309,7 +1324,8 @@ static void cnss_pci_smmu_fault_handler_irq(struct iommu_domain *domain,
 	cnss_record_smmu_fault_timestamp(pci_priv, SMMU_CB_EXIT);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)) && \
+     (LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0))
 void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv)
 {
 	qcom_iommu_register_device_fault_handler_irq(&pci_priv->pci_dev->dev,
@@ -2538,8 +2554,13 @@ static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	int ret = 0;
 
 	cnss_fatal_err("MHI power up returns timeout\n");
+
+	ret = cnss_pci_check_link_status(pci_priv);
+	if (ret)
+		return ret;
 
 	if (cnss_mhi_scan_rddm_cookie(pci_priv, DEVICE_RDDM_COOKIE) ||
 	    cnss_get_dev_sol_value(plat_priv) > 0) {
@@ -4612,7 +4633,7 @@ reg_driver:
 	reinit_completion(&plat_priv->power_up_complete);
 	cnss_driver_event_post(plat_priv,
 			       CNSS_DRIVER_EVENT_REGISTER_DRIVER,
-			       CNSS_EVENT_SYNC_UNKILLABLE,
+			       0,
 			       pci_priv->driver_ops);
 }
 
@@ -5004,7 +5025,11 @@ static int cnss_pci_suspend(struct device *dev)
 		/* pcie link will be suspend by pcie PM */
 		goto out;
 
-	if (test_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state)) {
+	if (test_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state) ||
+	    test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) ||
+	    test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
+	    test_bit(CNSS_DRIVER_IDLE_RESTART, &plat_priv->driver_state) ||
+	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -5100,7 +5125,7 @@ static int cnss_pci_resume(struct device *dev)
 		goto out;
 
 	if (plat_priv->pwr_ctrl_mode == CNSS_POWER_CTRL_SCMI) {
-		/* pcie link have been resume by pcie bus pm */
+		/* pcie link has been resumed by pcie bus pm */
 		pci_priv->pci_link_state = PCI_LINK_UP;
 		goto out;
 	}
@@ -5113,11 +5138,12 @@ static int cnss_pci_resume(struct device *dev)
 		ret = cnss_pci_resume_bus(pci_priv);
 		mutex_unlock(&pci_priv->bus_lock);
 		if (ret)
-			goto out;
+			goto clear_flag;
 	}
 
 	ret = cnss_pci_resume_driver(pci_priv);
 
+clear_flag:
 	pci_priv->drv_connected_last = 0;
 	clear_bit(CNSS_IN_SUSPEND_RESUME, &plat_priv->driver_state);
 
@@ -6300,6 +6326,202 @@ static void cnss_pci_free_tme_opt_file_mem(struct cnss_pci_data *pci_priv)
 	}
 }
 
+#define CNSS_BDF_MAP_LINE_MAX 128
+
+/**
+ * cnss_bdf_map_parse_section() - Parse [pcie_dev_VID_DID] section header
+ * @line:    input line starting with '['
+ * @sec_vid: output vendor ID parsed from section header
+ * @sec_did: output device ID parsed from section header
+ *
+ * Return: 0 on success, -EINVAL if line is not a valid section header
+ */
+static int cnss_bdf_map_parse_section(const char *line,
+				      u16 *sec_vid, u16 *sec_did)
+{
+	unsigned int v, d;
+
+	if (*line != '[')
+		return -EINVAL;
+
+	if (sscanf(line, "[pcie_dev_%4x_%4x]", &v, &d) != 2)
+		return -EINVAL;
+
+	*sec_vid = (u16)v;
+	*sec_did = (u16)d;
+	return 0;
+}
+
+/**
+ * cnss_bdf_map_parse_entry() - Parse SUBSYS_XXXXXXXX = board_id entry line
+ * @line:     input INI entry line
+ * @ssid:     output subsystem device ID (high 16 bits of SUBSYS field)
+ * @svid:     output subsystem vendor ID (low 16 bits of SUBSYS field)
+ * @board_id: output board-id value mapped to bdwlan.e<board_id>
+ *
+ * Return: 0 on success, -EAGAIN to skip line, -EINVAL on bad format
+ */
+static int cnss_bdf_map_parse_entry(const char *line,
+				    u16 *ssid, u16 *svid, u32 *board_id)
+{
+	unsigned int subsys;
+	int bid = 0;
+	int key_start = 0, key_end = 0, val_start = 0;
+
+	while (*line == ' ' || *line == '\t')
+		line++;
+
+	if (*line == '\0' || *line == '\n' || *line == '#')
+		return -EAGAIN;
+
+	if (*line == '[')
+		return -EAGAIN;
+
+	/*
+	 * Two separate %n variables to measure exact hex digit count:
+	 *   key_start: position after "SUBSYS_"  (= 7)
+	 *   key_end:   position after hex digits  (= 7 + N)
+	 * Difference must equal 8 to enforce exactly 8 SUBSYS hex digits.
+	 * Space around '=' is optional — sscanf space matches 0+.
+	 */
+	if (sscanf(line, "SUBSYS_%n%8x%n =%n",
+		   &key_start, &subsys, &key_end, &val_start) != 1 ||
+	    val_start == 0)
+		return -EINVAL;
+
+	if ((key_end - key_start) != 8)
+		return -EINVAL;
+
+	/*
+	 * %i: auto-detects base (0x prefix -> hex), stops at first
+	 * non-numeric char so inline comments are ignored naturally.
+	 */
+	if (sscanf(line + val_start, " %i", &bid) != 1)
+		return -EINVAL;
+
+	*ssid = (u16)(subsys >> 16);
+	*svid = (u16)(subsys & 0xFFFF);
+	*board_id = (u32)bid;
+	return 0;
+}
+
+/**
+ * cnss_pcie_parse_bdf_ini() - Load and search wlan_cnss_pcie_bdf.ini
+ * @pci_priv: PCIe private data with query VID/DID/SSID/SVID identifiers
+ *
+ * Loads CNSS_BDF_MAP_FILE via firmware loader and searches for a section
+ * and entry matching the device PCIe identifiers. On match, caches the
+ * resolved board-id in pci_priv for subsequent SSR cycles.
+ *
+ * Return: 0 on match, -ENOENT if file missing or no entry found
+ */
+static int cnss_pcie_parse_bdf_ini(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	const struct firmware *fw_entry = NULL;
+	const char *buf, *buf_end, *line_start, *line_end;
+	char line[CNSS_BDF_MAP_LINE_MAX];
+	u16 q_vid, q_did, q_ssid, q_svid;
+	u16 sec_vid = 0, sec_did = 0;
+	u16 e_ssid, e_svid;
+	u32 board_id;
+	bool in_valid_section = false;
+	int ret, len, found = 0;
+
+	q_vid  = pci_priv->pci_vendor_id;
+	q_did  = (u16)pci_priv->device_id;
+	q_ssid = pci_priv->pci_subsystem_device;
+	q_svid = pci_priv->pci_subsystem_vendor;
+
+	cnss_pr_dbg("BDF INI lookup: VID=0x%04x DID=0x%04x SSID=0x%04x SVID=0x%04x\n",
+		    q_vid, q_did, q_ssid, q_svid);
+
+	ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
+					   CNSS_BDF_MAP_FILE);
+	if (ret) {
+		cnss_pr_err("BDF INI %s not found: %d\n",
+			    CNSS_BDF_MAP_FILE, ret);
+		return -ENOENT;
+	}
+
+	buf        = fw_entry->data;
+	buf_end    = buf + fw_entry->size;
+	line_start = buf;
+
+	while (line_start < buf_end) {
+		line_end = memchr(line_start, '\n', buf_end - line_start);
+		if (!line_end)
+			line_end = buf_end;
+
+		len = min_t(int, line_end - line_start,
+			    CNSS_BDF_MAP_LINE_MAX - 1);
+		memcpy(line, line_start, len);
+		line[len] = '\0';
+		line_start = line_end + 1;
+
+		if (*line == '[') {
+			if (!cnss_bdf_map_parse_section(line,
+							&sec_vid, &sec_did)) {
+				in_valid_section = true;
+			} else {
+				in_valid_section = false;
+				sec_vid = 0;
+				sec_did = 0;
+				cnss_pr_warn("BDF INI malformed section: %s\n",
+					     line);
+			}
+			continue;
+		}
+
+		if (!in_valid_section)
+			continue;
+
+		ret = cnss_bdf_map_parse_entry(line, &e_ssid, &e_svid,
+					       &board_id);
+		if (ret == -EAGAIN)
+			continue;
+		if (ret == -EINVAL) {
+			cnss_pr_warn("BDF INI malformed entry: %s\n", line);
+			continue;
+		}
+
+		if (sec_vid == q_vid && sec_did == q_did &&
+		    e_ssid == q_ssid && e_svid == q_svid) {
+			found = 1;
+			break;
+		}
+	}
+
+	release_firmware(fw_entry);
+
+	if (!found)
+		return -ENOENT;
+
+	cnss_pr_info("BDF INI: SUBSYS_%04X%04X -> board_id=0x%x\n",
+		     q_ssid, q_svid, board_id);
+
+	pci_priv->pcie_board_id = board_id;
+	pci_priv->pcie_board_id_valid = true;
+	return 0;
+}
+
+int cnss_pci_lookup_board_id(struct cnss_pci_data *pci_priv, u32 *board_id)
+{
+	int ret;
+
+	if (pci_priv->pcie_board_id_valid) {
+		*board_id = pci_priv->pcie_board_id;
+		return 0;
+	}
+
+	ret = cnss_pcie_parse_bdf_ini(pci_priv);
+	if (ret)
+		return ret;
+
+	*board_id = pci_priv->pcie_board_id;
+	return 0;
+}
+
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -6781,8 +7003,10 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int num_vectors;
 	struct cnss_msi_config *msi_config;
+	unsigned int irq_flag = PCI_IRQ_MSI;
 
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -6805,19 +7029,13 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 		goto out;
 	}
 
-	switch (pci_priv->device_id) {
-	case COLOGNE_DEVICE_ID:
-		num_vectors = pci_alloc_irq_vectors(pci_dev,
-						    msi_config->total_vectors,
-						    msi_config->total_vectors,
-						    PCI_IRQ_MSI | PCI_IRQ_MSIX);
-		break;
-	default:
-		num_vectors = pci_alloc_irq_vectors(pci_dev,
-						    msi_config->total_vectors,
-						    msi_config->total_vectors,
-						    PCI_IRQ_MSI);
-	}
+	if (plat_priv && plat_priv->msix_supported)
+		irq_flag |= PCI_IRQ_MSIX;
+
+	num_vectors = pci_alloc_irq_vectors(pci_dev,
+					    msi_config->total_vectors,
+					    msi_config->total_vectors,
+					    irq_flag);
 	if ((num_vectors != msi_config->total_vectors) &&
 	    !cnss_pci_fallback_one_msi(pci_priv, &num_vectors)) {
 		cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
@@ -7338,6 +7556,7 @@ retry:
 	cnss_mhi_debug_reg_dump(pci_priv);
 	cnss_pci_bhi_debug_reg_dump(pci_priv);
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
+	cnss_pci_soc_reset_cause_reg_dump(pci_priv);
 
 recovery:
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
@@ -7427,6 +7646,7 @@ retry:
 	cnss_mhi_debug_reg_dump(pci_priv);
 	cnss_pci_bhi_debug_reg_dump(pci_priv);
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
+	cnss_pci_soc_reset_cause_reg_dump(pci_priv);
 
 	if (!cnss_pci_assert_host_sol(pci_priv))
 		return 0;
@@ -8097,6 +8317,7 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
 		cnss_mhi_debug_reg_dump(pci_priv);
 		cnss_pci_bhi_debug_reg_dump(pci_priv);
 		cnss_pci_soc_scratch_reg_dump(pci_priv);
+		cnss_pci_soc_reset_cause_reg_dump(pci_priv);
 		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 				       CNSS_REASON_TIMEOUT);
 		return;
@@ -8122,6 +8343,7 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
 		cnss_mhi_debug_reg_dump(pci_priv);
 		cnss_pci_bhi_debug_reg_dump(pci_priv);
 		cnss_pci_soc_scratch_reg_dump(pci_priv);
+		cnss_pci_soc_reset_cause_reg_dump(pci_priv);
 
 		if (!cnss_pci_assert_host_sol(pci_priv))
 			return;
@@ -8307,6 +8529,10 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 
 	pci_priv->def_link_speed = link_info->target_link_speed;
 	pci_priv->def_link_width = link_info->target_link_width;
+	/* Keep cur_link_speed in sync too; def_ and cur_ could converge
+	 * into a single field later, but are tracked separately for now.
+	 */
+	pci_priv->cur_link_speed = link_info->target_link_speed;
 
 	return 0;
 }
@@ -9079,6 +9305,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	pci_priv->pci_dev = pci_dev;
 	pci_priv->pci_device_id = id;
 	pci_priv->device_id = pci_dev->device;
+	pci_priv->pci_vendor_id = pci_dev->vendor;
+	pci_priv->pci_subsystem_vendor = pci_dev->subsystem_vendor;
+	pci_priv->pci_subsystem_device = pci_dev->subsystem_device;
 	cnss_set_pci_priv(pci_dev, pci_priv);
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
@@ -9284,6 +9513,35 @@ static const struct dev_pm_ops cnss_pm_ops = {
 			   cnss_pci_runtime_idle)
 };
 
+static pci_ers_result_t cnss_pci_error_detected(struct pci_dev *pci_dev,
+						pci_channel_state_t state)
+{
+	struct cnss_pci_data *pci_priv;
+
+	if (!pci_dev) {
+		cnss_pr_err("the pci_dev is NULL\n");
+		return PCI_ERS_RESULT_NONE;
+	}
+
+	cnss_pr_dbg("PCI error detected, state = %u\n", state);
+
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv) {
+		cnss_pr_err("the cnss_pci_data is NULL\n");
+		return PCI_ERS_RESULT_NONE;
+	}
+
+	cnss_pr_dbg("handle PCI link down\n");
+	cnss_pci_handle_linkdown(pci_priv);
+
+	return PCI_ERS_RESULT_CAN_RECOVER;
+}
+
+
+static const struct pci_error_handlers cnss_pci_err_handler = {
+    .error_detected = cnss_pci_error_detected,
+};
+
 static struct pci_driver cnss_pci_driver = {
 	.name     = "cnss_pci",
 	.id_table = cnss_pci_id_table,
@@ -9292,6 +9550,7 @@ static struct pci_driver cnss_pci_driver = {
 	.driver = {
 		.pm = &cnss_pm_ops,
 	},
+	.err_handler = &cnss_pci_err_handler,
 };
 
 static int cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
@@ -9395,6 +9654,35 @@ void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
 	}
 }
 
+#if (KERNEL_VERSION(7, 1, 0) <= LINUX_VERSION_CODE)
+/*
+ * struct image_info's mhi_buf became a flexible array member upstream in
+ * kernel 7.1.0, which is always embedded in the struct allocation and can
+ * never be NULL, so only the entries count is worth validating here.
+ */
+static bool cnss_pci_rddm_image_invalid(struct image_info *rddm_image)
+{
+	if (rddm_image->entries <= 1) {
+		cnss_pr_err("Invalid RDDM image: entries=%d\n",
+			    rddm_image->entries);
+		return true;
+	}
+
+	return false;
+}
+#else
+static bool cnss_pci_rddm_image_invalid(struct image_info *rddm_image)
+{
+	if (rddm_image->entries <= 1 || !rddm_image->mhi_buf) {
+		cnss_pr_err("Invalid RDDM image: entries=%d, mhi_buf=%pK\n",
+			    rddm_image->entries, rddm_image->mhi_buf);
+		return true;
+	}
+
+	return false;
+}
+#endif
+
 u8 **cnss_pci_collect_rddm_seg_info(struct cnss_pci_data *pci_priv,
 				    u32 *rddm_entries,
 				    u32 *rddm_seg_len)
@@ -9422,11 +9710,8 @@ u8 **cnss_pci_collect_rddm_seg_info(struct cnss_pci_data *pci_priv,
 	}
 
 	/* Validate RDDM image entries and buffer */
-	if (rddm_image->entries <= 1 || !rddm_image->mhi_buf) {
-		cnss_pr_err("Invalid RDDM image: entries=%d, mhi_buf=%pK\n",
-			    rddm_image->entries, rddm_image->mhi_buf);
+	if (cnss_pci_rddm_image_invalid(rddm_image))
 		return NULL;
-	}
 
 	/* Allocate array to hold segment pointers */
 	seg_array = vzalloc(sizeof(u8 *) * (rddm_image->entries - 1));

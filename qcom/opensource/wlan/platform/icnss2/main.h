@@ -263,6 +263,7 @@ struct icnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_sleep;
 	int wlan_en_gpio;
 	int sw_ctrl_gpio;
+	int bt_en_gpio;
 };
 
 struct icnss_fw_mem {

@@ -96,7 +96,7 @@ struct cnss_pool {
 	struct kobject kobj;
 };
 
-/**
+/*
  * Memory pool
  * -----------
  *
@@ -130,20 +130,23 @@ static struct cnss_pool cnss_pools_default[] = {
 	{256 * 1024, 2, "cnss-pool-256k", NULL, NULL, NULL},
 };
 
+#ifdef CONFIG_CNSS2_DEBUG
+
 static struct cnss_pool cnss_pools_adrastea[] = {
 	{16 * 1024, 8, "cnss-pool-16k", NULL, NULL, NULL},
 	{32 * 1024, 8, "cnss-pool-32k", NULL, NULL, NULL},
 	{64 * 1024, 3, "cnss-pool-64k", NULL, NULL, NULL},
+	{128 * 1024, 1, "cnss-pool-128k", NULL, NULL, NULL},
 };
 
 static struct cnss_pool cnss_pools_wcn6750[] = {
-	{16 * 1024, 8, "cnss-pool-16k", NULL, NULL, NULL},
+	{16 * 1024, 10, "cnss-pool-16k", NULL, NULL, NULL},
 	{32 * 1024, 11, "cnss-pool-32k", NULL, NULL, NULL},
-	{64 * 1024, 15, "cnss-pool-64k", NULL, NULL, NULL},
-	{128 * 1024, 4, "cnss-pool-128k", NULL, NULL, NULL},
+	{64 * 1024, 31, "cnss-pool-64k", NULL, NULL, NULL},
+	{128 * 1024, 8, "cnss-pool-128k", NULL, NULL, NULL},
+	{256 * 1024, 1, "cnss-pool-256k", NULL, NULL, NULL},
 };
 
-#ifdef CONFIG_CNSS2_DEBUG
 static struct cnss_pool cnss_pools_wcn6450[] = {
 	{16 * 1024, 24, "cnss-pool-16k", NULL, NULL, NULL},
 	{32 * 1024, 14, "cnss-pool-32k", NULL, NULL, NULL},
@@ -155,7 +158,7 @@ static struct cnss_pool cnss_pools_fig[] = {
 	{16 * 1024, 80, "cnss-pool-16k", NULL, NULL, NULL},
 	{32 * 1024, 62, "cnss-pool-32k", NULL, NULL, NULL},
 	{64 * 1024, 44, "cnss-pool-64k", NULL, NULL, NULL},
-	{128 * 1024, 14, "cnss-pool-128k", NULL, NULL, NULL},
+	{128 * 1024, 15, "cnss-pool-128k", NULL, NULL, NULL},
 	{256 * 1024, 4, "cnss-pool-256k", NULL, NULL, NULL},
 };
 
@@ -191,6 +194,20 @@ static struct cnss_pool cnss_pools_wcn8750[] = {
 };
 #else
 
+static struct cnss_pool cnss_pools_adrastea[] = {
+	{16 * 1024, 8, "cnss-pool-16k", NULL, NULL, NULL},
+	{32 * 1024, 8, "cnss-pool-32k", NULL, NULL, NULL},
+	{64 * 1024, 4, "cnss-pool-64k", NULL, NULL, NULL},
+};
+
+static struct cnss_pool cnss_pools_wcn6750[] = {
+	{16 * 1024, 10, "cnss-pool-16k", NULL, NULL, NULL},
+	{32 * 1024, 10, "cnss-pool-32k", NULL, NULL, NULL},
+	{64 * 1024, 6, "cnss-pool-64k", NULL, NULL, NULL},
+	{128 * 1024, 4, "cnss-pool-128k", NULL, NULL, NULL},
+	{256 * 1024, 1, "cnss-pool-256k", NULL, NULL, NULL},
+};
+
 static struct cnss_pool cnss_pools_wcn6450[] = {
 	{16 * 1024, 14, "cnss-pool-16k", NULL, NULL, NULL},
 	{32 * 1024, 10, "cnss-pool-32k", NULL, NULL, NULL},
@@ -202,7 +219,7 @@ static struct cnss_pool cnss_pools_fig[] = {
 	{16 * 1024, 68, "cnss-pool-16k", NULL, NULL, NULL},
 	{32 * 1024, 62, "cnss-pool-32k", NULL, NULL, NULL},
 	{64 * 1024, 10, "cnss-pool-64k", NULL, NULL, NULL},
-	{128 * 1024, 9, "cnss-pool-128k", NULL, NULL, NULL},
+	{128 * 1024, 10, "cnss-pool-128k", NULL, NULL, NULL},
 	{256 * 1024, 1, "cnss-pool-256k", NULL, NULL, NULL},
 };
 
@@ -548,15 +565,11 @@ static inline void cnss_stack_track_deinit(struct cnss_pool *cnss_pool)
 #endif
 
 /**
- * cnss_pool_int() - Initialize memory pools.
+ * cnss_mempool_alloc() - Allocate memory from mempool or slab.
+ * @gfp_mask: GFP flags for the allocation.
+ * @pool_data: Pointer to the underlying slab cache (kmem_cache).
  *
- * Create cnss pools as configured by cnss_pools[]. It is the responsibility of
- * the caller to invoke cnss_pool_deinit() routine to clean it up. This
- * function needs to be called at early boot to preallocate minimum buffers in
- * the pool.
- *
- * Return: 0 - success, otherwise error code.
- *
+ * Return: Pointer to allocated memory, or NULL if prealloc pool is active.
  */
 static void *cnss_mempool_alloc(gfp_t gfp_mask, void *pool_data)
 {
@@ -567,6 +580,16 @@ static void *cnss_mempool_alloc(gfp_t gfp_mask, void *pool_data)
 
 }
 
+/**
+ * cnss_pool_init() - Initialize memory pools.
+ *
+ * Create cnss pools as configured by cnss_pools[]. It is the responsibility of
+ * the caller to invoke cnss_pool_deinit() routine to clean it up. This
+ * function needs to be called at early boot to preallocate minimum buffers in
+ * the pool.
+ *
+ * Return: 0 - success, otherwise error code.
+ */
 static int cnss_pool_init(void)
 {
 	int i;
@@ -732,6 +755,7 @@ EXPORT_SYMBOL(cnss_deinitialize_prealloc_pool);
  * cnss_record_stack_trace() - Record stack trace for memory allocation
  * @alloc_info: Pointer to allocation info structure
  * @mem: Allocated memory pointer
+ * @pool_name: Name of the pool for identification
  */
 static inline
 void cnss_record_stack_trace(struct cnss_alloc_info *alloc_info, void *mem,
@@ -791,6 +815,7 @@ void cnss_record_stack_trace(struct cnss_alloc_info *alloc_info, void *mem,
 /**
  * cnss_clear_stack_trace() - Clear stack trace for memory deallocation
  * @alloc_info: Pointer to allocation info structure
+ * @pool_name: Name of the pool for identification
  */
 static void cnss_clear_stack_trace(struct cnss_alloc_info *alloc_info,
 				   const char *pool_name)
@@ -1039,7 +1064,7 @@ EXPORT_SYMBOL(wcnss_prealloc_get);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0))
 /**
- * wcnss_prealloc_put() - Relase allocated memory
+ * wcnss_prealloc_put() - Release allocated memory
  * @mem: Allocated memory
  *
  * Free the memory got by wcnss_prealloc_get() to slab or pool reserve if memory
@@ -1112,7 +1137,7 @@ static int cnss_pool_get_index(void *mem)
 }
 
 /**
- * wcnss_prealloc_put() - Relase allocated memory
+ * wcnss_prealloc_put() - Release allocated memory
  * @mem: Allocated memory
  *
  * Free the memory got by wcnss_prealloc_get() to slab or pool reserve if memory

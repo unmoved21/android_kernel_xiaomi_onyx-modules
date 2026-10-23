@@ -593,6 +593,8 @@ int wlfw_ind_register_send_sync_msg(struct icnss_priv *priv)
 		req->respond_get_info_enable = 1;
 		req->m3_dump_upload_segments_req_enable_valid = 1;
 		req->m3_dump_upload_segments_req_enable = 1;
+		req->wfc_call_twt_config_enable_valid = 1;
+		req->wfc_call_twt_config_enable = 1;
 	}
 
 	req->async_data_enable_valid = 1;
@@ -1131,6 +1133,15 @@ static int icnss_get_bdf_file_name(struct icnss_priv *priv,
 				 BDF_FILE_NAME_PREFIX "%02x.e%02x",
 				 priv->board_id >> 8 & 0xFF,
 				 priv->board_id & 0xFF);
+		if (priv->foundry_name) {
+			strscpy(foundry_specific_filename, filename_tmp, ICNSS_MAX_FILE_NAME);
+			memmove(foundry_specific_filename + BDWLAN_SIZE + 1,
+				foundry_specific_filename + BDWLAN_SIZE,
+				BDWLAN_SIZE - 1);
+			foundry_specific_filename[BDWLAN_SIZE] = priv->foundry_name;
+			foundry_specific_filename[ICNSS_MAX_FILE_NAME - 1] = '\0';
+			strscpy(filename_tmp, foundry_specific_filename, ICNSS_MAX_FILE_NAME);
+		}
 		break;
 	case ICNSS_BDF_BIN:
 		if (priv->board_id == 0xFF)

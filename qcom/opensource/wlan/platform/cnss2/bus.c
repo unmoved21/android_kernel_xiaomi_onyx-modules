@@ -914,3 +914,17 @@ u8 **cnss_bus_collect_rddm_seg_info(struct cnss_plat_data *plat_priv,
 
 	return NULL;
 }
+
+int cnss_bus_lookup_board_id(struct cnss_plat_data *plat_priv, u32 *board_id)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_lookup_board_id(plat_priv->bus_priv, board_id);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n", plat_priv->bus_type);
+		return -EINVAL;
+	}
+}

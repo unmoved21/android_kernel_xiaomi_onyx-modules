@@ -55,6 +55,7 @@
 #endif
 #include <linux/regulator/consumer.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/component.h>
 
 #include <linux/qcom-iommu-util.h>
 #include <soc/qcom/of_common.h>
@@ -6018,7 +6019,8 @@ static int icnss_smmu_fault_handler(struct iommu_domain *domain,
 }
 
 #if defined(CONFIG_CNSS2_SMMU_DB_SUPPORT) && \
-    (LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0))
+    ((LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0)) || \
+     (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)))
 #define PCIE_LOCAL_REG_APPS_TO_Q6	0x3224
 #define PCIE_LOCAL_REG_WCSS_IE_IRQ	0x3228
 
@@ -6080,7 +6082,8 @@ static void icnss_pci_smmu_fault_handler_irq(struct iommu_domain *domain,
 	icnss_record_smmu_fault_timestamp(priv, SMMU_CB_EXIT);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)) && \
+     (LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0))
 static void icnss_register_iommu_fault_handler_irq(struct icnss_priv *priv)
 {
 	struct platform_device *pdev = priv->pdev;
@@ -6161,6 +6164,19 @@ static inline int icnss_dt_parse_iommu_address(struct device *dev, u32 *addr_win
 }
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0))
+static void icnss_set_smmu_fault_handler(struct icnss_priv *priv)
+{
+	qcom_iommu_set_fault_handler(priv->iommu_domain,
+				     icnss_smmu_fault_handler, priv);
+}
+#else
+static void icnss_set_smmu_fault_handler(struct icnss_priv *priv)
+{
+	iommu_set_fault_handler(priv->iommu_domain,
+				icnss_smmu_fault_handler, priv);
+}
+#endif
 
 static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 {
@@ -6171,6 +6187,7 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 	struct resource *res;
 	u32 addr_win[2];
 	struct device_node *of_node = dev->of_node;
+	struct device_node *iommu_group_node = NULL;
 
 	ret = of_property_read_u32_array(of_node,
 					 "qcom,iommu-dma-addr-pool",
@@ -6178,13 +6195,15 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 					 ARRAY_SIZE(addr_win));
 
 	if (ret) {
-		of_node = of_parse_phandle(dev->of_node,
-					   "qcom,iommu-group", 0);
-		if (of_node)
+		iommu_group_node = of_parse_phandle(dev->of_node,
+						    "qcom,iommu-group", 0);
+		if (iommu_group_node) {
+			of_node = iommu_group_node;
 			ret = of_property_read_u32_array(of_node,
 							 "qcom,iommu-dma-addr-pool",
 							 addr_win,
 							 ARRAY_SIZE(addr_win));
+		}
 	}
 
 	if (ret)
@@ -6202,8 +6221,10 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 		priv->iommu_domain =
 			iommu_get_domain_for_dev(&pdev->dev);
 
-		if (!priv->iommu_domain)
+		if (!priv->iommu_domain) {
+			of_node_put(iommu_group_node);
 			return -EPROBE_DEFER;
+		}
 
 		ret = of_property_read_string(of_node, "qcom,iommu-dma",
 					      &iommu_dma_type);
@@ -6212,9 +6233,7 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 			priv->smmu_s1_enable = true;
 			if (priv->device_id == WCN6750_DEVICE_ID ||
 			    priv->device_id == WCN6450_DEVICE_ID)
-				iommu_set_fault_handler(priv->iommu_domain,
-						icnss_smmu_fault_handler,
-						priv);
+				icnss_set_smmu_fault_handler(priv);
 			else if (priv->device_id == WCN7750_DEVICE_ID ||
 				 priv->device_id == WCN8750_DEVICE_ID)
 				icnss_register_iommu_fault_handler_irq(priv);
@@ -6235,8 +6254,7 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 		}
 	}
 
-	if (of_node != dev->of_node)
-		of_node_put(of_node);
+	of_node_put(iommu_group_node);
 
 	return 0;
 }
@@ -6348,6 +6366,21 @@ static const struct of_device_id icnss_direct_link_dt_match[] = {
 };
 
 MODULE_DEVICE_TABLE(of, icnss_direct_link_dt_match);
+
+static const struct platform_device_id icnss_wonder_platform_id_table[] = {
+	{ .name = "vendor-wlan-wonder",
+	  .driver_data = WONDER_VENDOR_DEVICE_ID, },
+	{ },
+};
+
+static const struct of_device_id icnss_wonder_dt_match[] = {
+	{
+		.compatible = "qcom,icnss-vendor-wlan-wonder",
+		.data = (void *)&icnss_wonder_platform_id_table[0]},
+	{ },
+};
+
+MODULE_DEVICE_TABLE(of, icnss_wonder_dt_match);
 
 static void icnss_init_control_params(struct icnss_priv *priv)
 {
@@ -6518,7 +6551,7 @@ icnss_get_cpumask_for_wlan_txrx_intr(struct icnss_priv *priv)
 					 "wlan-txrx-intr-cpumask",
 					 cpumask, CPUMASK_ARRAY_SIZE);
 	if (ret) {
-		icnss_pr_err("Failed to get cpumask for wlan txrx interrupts");
+		icnss_pr_dbg("irq affinity not defined in DT, applying default affinity");
 		return;
 	}
 
@@ -6565,9 +6598,116 @@ static void icnss_direct_link_remove(struct platform_device *pdev)
 #endif
 }
 
+/**
+ * icnss_vendor_wonder_comp_bind - vendor wonder device component bind
+ *  callback
+ * @comp: vendor wonder device
+ * @master: master device
+ * @master_data: master data
+ *
+ * Return: 0 on success else errno
+ */
+static
+int icnss_vendor_wonder_comp_bind(struct device *comp, struct device *master,
+				  void *master_data)
+{
+	icnss_pr_info("vendor wonder bound to master device %s\n",
+		      dev_name(master));
+	return 0;
+}
+
+/**
+ * icnss_vendor_wonder_comp_unbind - vendor wonder device component unbind
+ *  callback
+ * @comp: vendor wonder device
+ * @master: master device
+ * @master_data: master data
+ *
+ * Return: None
+ */
+static
+void icnss_vendor_wonder_comp_unbind(struct device *comp,
+				     struct device *master, void *master_data)
+{
+	icnss_pr_info("vendor wonder unbound to master device\n");
+}
+
+static struct platform_device *wonder_plat_dev;
+static const void *wonder_priv_data;
+
+static const struct component_ops wonder_comp_ops = {
+	.bind = icnss_vendor_wonder_comp_bind,
+	.unbind = icnss_vendor_wonder_comp_unbind,
+};
+
+static inline int icnss_add_vendor_wonder_component(void)
+{
+	platform_set_drvdata(wonder_plat_dev, (void *)wonder_priv_data);
+
+	return component_add(&wonder_plat_dev->dev, &wonder_comp_ops);
+}
+
+static inline void icnss_del_vendor_wonder_component(void)
+{
+	component_del(&wonder_plat_dev->dev, &wonder_comp_ops);
+	platform_set_drvdata(wonder_plat_dev, NULL);
+}
+
+int icnss_set_vendor_wonder_priv_data(const void *priv_data)
+{
+	wonder_priv_data = priv_data;
+
+	if (!wonder_plat_dev) {
+		icnss_pr_info("vendor wonder plat device not available\n");
+		return 0;
+	}
+
+	if (wonder_priv_data)
+		return icnss_add_vendor_wonder_component();
+
+	icnss_del_vendor_wonder_component();
+
+	return 0;
+}
+EXPORT_SYMBOL(icnss_set_vendor_wonder_priv_data);
+
+static int icnss_wonder_probe(struct platform_device *pdev)
+{
+	if (!wonder_plat_dev) {
+		icnss_pr_info("wlan vendor wonder device probed!\n");
+		wonder_plat_dev = pdev;
+
+		if (wonder_priv_data)
+			return icnss_add_vendor_wonder_component();
+
+		return 0;
+	}
+
+	icnss_pr_info("wlan vendor wonder device already exists!\n");
+	return -EEXIST;
+}
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
+static int icnss_wonder_remove(struct platform_device *pdev)
+#else
+static void icnss_wonder_remove(struct platform_device *pdev)
+#endif
+{
+	if (wonder_plat_dev && wonder_priv_data)
+		icnss_del_vendor_wonder_component();
+
+	icnss_pr_info("wlan vendor wonder device removed!\n");
+	wonder_plat_dev = NULL;
+	wonder_priv_data = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
+	return 0;
+#endif
+}
+
 static int icnss_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+	int bt_en_gpio, bt_en_gpio_val;
 	const char *device_name;
 	struct device *dev = &pdev->dev;
 	struct icnss_priv *priv;
@@ -6620,6 +6760,19 @@ static int icnss_probe(struct platform_device *pdev)
 	ret = icnss_resource_parse(priv);
 	if (ret)
 		goto out_reset_drvdata;
+
+	if (priv->device_id == WCN7750_DEVICE_ID &&
+	    gpio_is_valid(priv->pinctrl_info.bt_en_gpio)) {
+		bt_en_gpio = priv->pinctrl_info.bt_en_gpio;
+		bt_en_gpio_val = gpio_get_value(bt_en_gpio);
+		ret = gpio_direction_output(bt_en_gpio, 0);
+		icnss_pr_info("BT_EN GPIO(%d) before: %d after: %d\n",
+			     bt_en_gpio, bt_en_gpio_val, gpio_get_value(bt_en_gpio));
+		if (ret)
+			icnss_pr_err("Failed to reset BT_EN GPIO(%d), err = %d\n",
+				     bt_en_gpio, ret);
+		ret = 0;
+	}
 
 	ret = icnss_msa_dt_parse(priv);
 	if (ret)
@@ -7163,6 +7316,15 @@ static struct platform_driver icnss_direct_link_driver = {
 	},
 };
 
+static struct platform_driver icnss_wonder_driver = {
+	.probe  = icnss_wonder_probe,
+	.remove = icnss_wonder_remove,
+	.driver = {
+		.name = "icnss2_vendor_wlan_wonder",
+		.of_match_table = icnss_wonder_dt_match,
+	},
+};
+
 /**
  * icnss_has_valid_dt_node() - Check if valid device tree node present
  *
@@ -7197,6 +7359,19 @@ static bool icnss_direct_link_has_valid_dt_node(void)
 	return false;
 }
 
+static bool icnss_wonder_has_valid_dt_node(void)
+{
+	struct device_node *dn = NULL;
+
+	for_each_matching_node(dn, icnss_wonder_dt_match) {
+		if (of_device_is_available(dn))
+			return true;
+	}
+
+	icnss_pr_dbg("No valid icnss2 vendor wonder dtsi entry\n");
+	return false;
+}
+
 static int __init icnss_initialize(void)
 {
 	int ret;
@@ -7213,6 +7388,17 @@ static int __init icnss_initialize(void)
 		if (ret) {
 			platform_driver_unregister(&icnss_driver);
 			icnss_debug_deinit();
+			return ret;
+		}
+	}
+
+	if (!ret && icnss_wonder_has_valid_dt_node()) {
+		ret = platform_driver_register(&icnss_wonder_driver);
+		icnss_pr_info("Vendor wonder driver register status:%d", ret);
+		if (ret) {
+			platform_driver_unregister(&icnss_direct_link_driver);
+			platform_driver_unregister(&icnss_driver);
+			icnss_debug_deinit();
 		}
 	}
 
@@ -7223,6 +7409,7 @@ static void __exit icnss_exit(void)
 {
 	platform_driver_unregister(&icnss_driver);
 	platform_driver_unregister(&icnss_direct_link_driver);
+	platform_driver_unregister(&icnss_wonder_driver);
 	icnss_debug_deinit();
 }
 

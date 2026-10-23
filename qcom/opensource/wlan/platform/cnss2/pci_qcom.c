@@ -385,9 +385,9 @@ retry:
 	} else {
 		/* Since DRV suspend cannot be done in Gen 3, set it to
 		 * Gen 2 if current link speed is larger than Gen 2.
+		 * cur_link_speed holds a fresh value already, updated at
+		 * enumeration time and on every MHI bus bandwidth change.
 		 */
-
-		cnss_pci_get_link_status(pci_priv);
 		if (pci_priv->drv_connected_last &&
 		    pci_priv->cur_link_speed > PCI_EXP_LNKSTA_CLS_5_0GB)
 			cnss_set_pci_link_status(pci_priv, PCI_GEN2);
@@ -583,12 +583,22 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 	return -ENOSYS;
 }
 
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0))
+static
+void cnss_register_iommu_fault_handler(struct cnss_pci_data *pci_priv)
+{
+	qcom_iommu_set_fault_handler(pci_priv->iommu_domain,
+				     cnss_pci_smmu_fault_handler, pci_priv);
+}
+#else
 static
 void cnss_register_iommu_fault_handler(struct cnss_pci_data *pci_priv)
 {
 	iommu_set_fault_handler(pci_priv->iommu_domain,
 				cnss_pci_smmu_fault_handler, pci_priv);
 }
+#endif
 #endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0))

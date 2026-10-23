@@ -40,6 +40,12 @@ ifeq ($(CONFIG_WCNSS_MEM_PRE_ALLOC),m)
 KBUILD_CPPFLAGS += -DCONFIG_WCNSS_MEM_PRE_ALLOC
 endif
 
+# CONFIG_WCNSS_SKB_PRE_ALLOC should never be "y" here since it
+# can be only compiled as a module from out-of-kernel-tree source.
+ifeq ($(CONFIG_WCNSS_SKB_PRE_ALLOC),m)
+KBUILD_CPPFLAGS += -DCONFIG_WCNSS_SKB_PRE_ALLOC
+endif
+
 ifeq ($(CONFIG_NOT_SET_PCI_DSTATE),y)
 KBUILD_CPPFLAGS += -DCONFIG_NOT_SET_PCI_DSTATE
 endif
@@ -129,3 +135,6 @@ obj-$(CONFIG_ICNSS2) += icnss2/
 obj-$(CONFIG_CNSS_GENL) += cnss_genl/
 obj-$(CONFIG_WCNSS_MEM_PRE_ALLOC) += cnss_prealloc/
 obj-y += cnss_utils/
+obj-$(CONFIG_CNSS2_SDIO) += cnss2_sdio/
+obj-$(CONFIG_SDIO_QCN) += qcn_sdio/
+obj-$(CONFIG_SDIO_QCN) += qti_sdio_client/
