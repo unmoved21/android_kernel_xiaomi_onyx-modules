@@ -1782,6 +1782,8 @@ typedef enum {
     MLO_SHMEM_RECOVERY_CRASH_PARTNER_CHIPS = 1,
     MLO_SHMEM_RECOVER_NON_MLO_MODE = 2,
     MLO_SHMEM_RECOVER_NON_CRASH_MLO_MODE = 3,
+    /* RECONFIG: chip crash handled via ML-reconfig sequence */
+    MLO_SHMEM_RECOVER_RECONFIG_MLO_MODE = 4,
 } MLO_SHMEM_CHIP_RECOVERY_MODE;
 
 /* glb link info structures used for scratchpad memory (crash and recovery) */
