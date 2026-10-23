@@ -282,7 +282,7 @@ static int btfm_slim_alloc_port(struct btfmslim *btfmslim)
 	rx_chs = btfmslim->rx_chs;
 	tx_chs = btfmslim->tx_chs;
 	if ((chipset_ver >=  QCA_CHEROKEE_SOC_ID_0310) &&
-		(chipset_ver <=  QCA_CHEROKEE_SOC_ID_0320_UMC)) {
+		(chipset_ver <=  QCA_CHEROKEE_SOC_ID_0330)) {
 		for (i = 0; (tx_chs->port != BTFM_SLIM_PGD_PORT_LAST) &&
 		(i < BTFM_SLIM_NUM_CODEC_DAIS); i++, tx_chs++) {
 			if (tx_chs->port == SLAVE_SB_PGD_PORT_TX1_FM)
@@ -422,6 +422,7 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0310  ||
 		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0320  ||
 		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0320_UMC  ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0330  ||
 		chipset_ver ==  QCA_APACHE_SOC_ID_0100  ||
 		chipset_ver ==  QCA_APACHE_SOC_ID_0110  ||
 		chipset_ver ==  QCA_APACHE_SOC_ID_0120 ||

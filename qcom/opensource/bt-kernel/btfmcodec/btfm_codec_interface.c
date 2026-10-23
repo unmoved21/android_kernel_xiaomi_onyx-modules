@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/kernel.h>
@@ -592,6 +592,75 @@ static int btfmcodec_configure_dma(struct btfmcodec_data *btfmcodec, uint8_t id)
 	return ret;
 }
 
+static int btfmcodec_configure_i2s(struct btfmcodec_data *btfmcodec, uint8_t id)
+{
+	struct btfmcodec_char_device *btfmcodec_dev = btfmcodec->btfmcodec_dev;
+	struct hwep_data *hwep_info = btfmcodec->hwep_info;
+	struct hwep_i2s_configurations i2s_config;
+	struct btm_i2s_config_req i2s_config_req;
+	struct hwep_dai_driver *dai_drv = (struct hwep_dai_driver *)
+					      btfmcodec_get_dai_drvdata(hwep_info);
+	wait_queue_head_t *rsp_wait_q =
+		&btfmcodec_dev->rsp_wait_q[BTM_PKT_TYPE_I2S_CONFIG_RSP];
+	uint8_t *status = &btfmcodec_dev->status[BTM_PKT_TYPE_I2S_CONFIG_RSP];
+	int ret = 0;
+
+	if (dai_drv && dai_drv->dai_ops && dai_drv->dai_ops->hwep_get_configs) {
+		dai_drv->dai_ops->hwep_get_configs((void *)btfmcodec->hwep_info,
+						   &i2s_config, id);
+	} else {
+		BTFMCODEC_DBG("No hwep_get_configs is set by hw ep driver");
+		return -1;
+	}
+
+	BTFMCODEC_DBG("framing packet for %d", id);
+	i2s_config_req.opcode        = BTM_BTFMCODEC_CODEC_CONFIG_I2S_REQ;
+	i2s_config_req.len           = BTM_CODEC_CONFIG_I2S_REQ_LEN;
+	i2s_config_req.stream_id     = i2s_config.stream_id;
+	i2s_config_req.sample_rate   = i2s_config.sample_rate;
+	i2s_config_req.bit_width     = i2s_config.bit_width;
+	i2s_config_req.num_channels  = i2s_config.num_channels;
+	i2s_config_req.channel_mode  = i2s_config.channel_mode;
+	i2s_config_req.channel_mask  = i2s_config.channel_mask;
+	i2s_config_req.codec_id      = i2s_config.codec_id;
+	i2s_config_req.lpaif_type    = i2s_config.lpaif_type;
+	i2s_config_req.intf_idx      = i2s_config.intf_idx;
+
+	BTFMCODEC_DBG("================================================\n");
+	BTFMCODEC_DBG("i2s_config_req.len          :%d", i2s_config_req.len);
+	BTFMCODEC_DBG("i2s_config_req.stream_id    :%d", i2s_config_req.stream_id);
+	BTFMCODEC_DBG("i2s_config_req.sample_rate  :%d", i2s_config_req.sample_rate);
+	BTFMCODEC_DBG("i2s_config_req.bit_width    :%d", i2s_config_req.bit_width);
+	BTFMCODEC_DBG("i2s_config_req.num_channels :%d", i2s_config_req.num_channels);
+	BTFMCODEC_DBG("i2s_config_req.channel_mode :%d", i2s_config_req.channel_mode);
+	BTFMCODEC_DBG("i2s_config_req.channel_mask :%d", i2s_config_req.channel_mask);
+	BTFMCODEC_DBG("i2s_config_req.codec_id     :%d", i2s_config_req.codec_id);
+	BTFMCODEC_DBG("i2s_config_req.lpaif_type   :%d", i2s_config_req.lpaif_type);
+	BTFMCODEC_DBG("i2s_config_req.intf_idx     :%d", i2s_config_req.intf_idx);
+	BTFMCODEC_DBG("================================================\n");
+
+	*status = BTM_WAITING_RSP;
+	btfmcodec_dev_enqueue_pkt(btfmcodec_dev, &i2s_config_req, (i2s_config_req.len +
+				BTM_HEADER_LEN));
+
+	ret = wait_event_interruptible_timeout(*rsp_wait_q,
+		(*status) != BTM_WAITING_RSP,
+		msecs_to_jiffies(BTM_MASTER_I2S_CONFIG_RSP_TIMEOUT));
+
+	if (ret == 0) {
+		BTFMCODEC_ERR("failed to recevie response from BTADV audio Manager");
+		ret = -ETIMEDOUT;
+	} else {
+		if (*status == BTM_RSP_RECV)
+			return 0;
+		else if (*status == BTM_FAIL_RESP_RECV ||
+			 *status == BTM_RSP_NOT_RECV_CLIENT_KILLED)
+			return -1;
+	}
+
+	return ret;
+}
+
 int btfmcodec_hwep_prepare(struct btfmcodec_data *btfmcodec, uint32_t sampling_rate,
 			uint32_t direction, int id, bool seamless)
 {
@@ -604,11 +673,11 @@ int btfmcodec_hwep_prepare(struct btfmcodec_data *btfmcodec, uint32_t sampling_r
 	if (dai_drv && dai_drv->dai_ops && dai_drv->dai_ops->hwep_prepare) {
 		ret = dai_drv->dai_ops->hwep_prepare((void *)hwep_info, sampling_rate,
 						      direction, id);
-		BTFMCODEC_ERR("%s: hwep info %ld", __func__, hwep_info->flags);
+		BTFMCODEC_INFO("%s: hwep info %ld", __func__, hwep_info->flags);
 		if (ret == 0 && test_bit(BTADV_AUDIO_MASTER_CONFIG, &hwep_info->flags)) {
 			ret = btfmcodec_configure_master(btfmcodec, (uint8_t)id);
 			if (ret < 0) {
-				BTFMCODEC_ERR("failed to configure master error %d", ret);
+				BTFMCODEC_INFO("failed to configure master error %d", ret);
 			} else {
 				if (seamless == false)
 					btfmcodec_set_current_state(state, BT_Connected);
@@ -619,13 +688,22 @@ int btfmcodec_hwep_prepare(struct btfmcodec_data *btfmcodec, uint32_t sampling_r
 				return  ret;
 			ret  = btfmcodec_configure_dma(btfmcodec, (uint8_t)id);
 			if (ret < 0) {
-				BTFMCODEC_ERR("failed to configure Codec DMA %d", ret);
+				BTFMCODEC_INFO("failed to configure Codec DMA %d", ret);
 				if (dai_drv && dai_drv->dai_ops &&
 				     dai_drv->dai_ops->hwep_shutdown) {
 					dai_drv->dai_ops->hwep_shutdown((void *)hwep_info, id);
 				}
+			}
+		} else if (ret == 0 && test_bit(BTADV_CONFIGURE_I2S, &hwep_info->flags)) {
+			BTFMCODEC_INFO("%s: configuring I2S", __func__);
+			ret = btfmcodec_configure_i2s(btfmcodec, (uint8_t)id);
+			if (ret < 0) {
+				BTFMCODEC_INFO("failed to configure Codec I2S %d", ret);
+				if (!seamless)
+					btfmcodec_set_current_state(state, IDLE);
 			} else {
-				if (seamless == false)
+				BTFMCODEC_INFO("I2S configured successfully");
+				if (!seamless)
 					btfmcodec_set_current_state(state, BT_Connected);
 			}
 		}
@@ -954,10 +1032,13 @@ int btfm_register_codec(struct hwep_data *hwep_info)
 			set_bit(BTADV_AUDIO_MASTER_CONFIG, &hwep_info->flags);
 		else if (!strcmp(hwep_info->driver_name, "btfmswr_slave"))
 			set_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags);
+		else if (!strcmp(hwep_info->driver_name, "btfmi2s_slave"))
+			set_bit(BTADV_CONFIGURE_I2S, &hwep_info->flags);
 
-	BTFMCODEC_INFO("%s: master %d dma codec %d", __func__,
+	BTFMCODEC_INFO("%s: master %d dma codec %d i2s codec %d", __func__,
 			(int)test_bit(BTADV_AUDIO_MASTER_CONFIG, &hwep_info->flags),
-			(int)test_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags));
+			(int)test_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags),
+			(int)test_bit(BTADV_CONFIGURE_I2S, &hwep_info->flags));
 	}
 
 	return ret;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /*
@@ -266,6 +266,11 @@ static struct vreg_data bt_vregs_info_cologne[] = {
 		{BT_VDD_ANT_LDO, BT_VDD_ANT_LDO_CURRENT}},
 };
 
+// Regulator structure for WCN M2 BT SoC series
+static struct vreg_data bt_vregs_info_wcn_m2[] = {
+	{},
+};
+
 static struct vreg_data platform_vregs_info_peach[] = {
 	/* VDD1P8_AON */
 	{NULL, "qcom,bt-vdd18-aon",      1620000, 1980000, 0, false, true,
@@ -343,6 +348,12 @@ static struct pwr_data vreg_info_cologne = {
 	.bt_num_vregs = ARRAY_SIZE(bt_vregs_info_cologne),
 };
 
+static struct pwr_data vreg_info_wcn_m2 = {
+	.compatible = "qcom,wcn-m2",
+	.bt_vregs = bt_vregs_info_wcn_m2,
+	.bt_num_vregs = ARRAY_SIZE(bt_vregs_info_wcn_m2),
+};
+
 static struct pwr_data vreg_info_kiwi_no_share_ant_power = {
 	.compatible = "qcom,kiwi-no-share-ant-power",
 	.bt_vregs = bt_vregs_info_kiwi,
@@ -403,6 +414,7 @@ static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,wcn786x", .data = &vreg_info_wcn786x},
 	{	.compatible = "qcom,wcn7750-bt", .data = &bt_vreg_info_wcn7750},
 	{	.compatible = "qcom,wcn7760-bt", .data = &vreg_info_cologne},
+	{	.compatible = "qcom,wcn-m2", .data = &vreg_info_wcn_m2},
 	{},
 };
 

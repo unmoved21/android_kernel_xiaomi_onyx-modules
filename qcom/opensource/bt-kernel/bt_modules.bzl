@@ -3,6 +3,7 @@ SLIMBUS_PATH = "slimbus"
 FMRTC_PATH = "rtc6226"
 BTFMCODEC_PATH = "btfmcodec"
 SWR_PATH = "soundwire"
+I2S_PATH = "i2s"
 
 # This dictionary holds all the BT modules included in the bt-kernel
 bt_modules = {}
@@ -136,5 +137,20 @@ register_bt_modules(
         ":%b_btpower", ":%b_btfmcodec", ":btfmcodec_headers",
         "//vendor/qcom/sm8750-modules/qcom/opensource/audio-kernel:%b_swr_dlkm",
         "//vendor/qcom/sm8750-modules/qcom/opensource/audio-kernel:audio_headers",
+    ],
+)
+register_bt_modules(
+    name = "btfm_i2s",
+    path = I2S_PATH,
+    config_opt = "CONFIG_BTFM_I2S",
+    srcs = [
+        "btfm_i2s.c",
+        "btfm_i2s.h",
+        "btfm_i2s_hw_interface.c",
+        "btfm_i2s_hw_interface.h",
+    ],
+    deps = [
+        ":%b_btpower", ":%b_btfmcodec", ":btfmcodec_headers",
+        "//vendor/qcom/opensource/audio-kernel:audio_headers",
     ],
 )

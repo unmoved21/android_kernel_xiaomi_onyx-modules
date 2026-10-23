@@ -191,7 +191,7 @@ void btfm_get_sampling_rate(uint32_t *sampling_rate)
 		*sampling_rate = 96000;
 	}
 
-	if (usecase_codec == APTX_AD_QLEA)
+	if (usecase_codec == APTX_AD_QLEA || usecase_codec == APTX_PLUS)
 		*sampling_rate = 192000;
 	BTFMSWR_INFO("current usecase codec type %s and sampling rate:%u khz",
 			codec_text[usecase_codec], *sampling_rate);

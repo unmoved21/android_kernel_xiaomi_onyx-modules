@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __LINUX_BTFM_CODEC_H
@@ -57,6 +57,7 @@ enum btfm_pkt_type {
 	BTM_PKT_TYPE_HWEP_CONFIG,
 	BTM_PKT_TYPE_DMA_CONFIG_RSP,
 	BTM_PKT_TYPE_USECASE_START_RSP,
+	BTM_PKT_TYPE_I2S_CONFIG_RSP,
 	BTM_PKT_TYPE_MAX,
 };
 

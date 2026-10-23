@@ -36,9 +36,11 @@ ifeq ($(TARGET_BOARD_PLATFORM), sun)
 BT_SELECT += CONFIG_BTFM_CODEC=m
 BT_SELECT += CONFIG_BTFM_SWR=m
 BT_SELECT += CONFIG_SLIM_BTFM_CODEC=m
+BT_SELECT += CONFIG_BTFM_I2S=m
 LOCAL_MODULE_KO_DIRS += btfmcodec/btfmcodec.ko
 LOCAL_MODULE_KO_DIRS += slimbus/btfm_slim_codec.ko
 LOCAL_MODULE_KO_DIRS += soundwire/bt_fm_swr.ko
+LOCAL_MODULE_KO_DIRS += i2s/btfm_i2s.ko
 else
 BT_SELECT += CONFIG_BTFM_SLIM=m
 LOCAL_MODULE_KO_DIRS += slimbus/bt_fm_slim.ko
@@ -133,6 +135,15 @@ LOCAL_MODULE_DEBUG_ENABLE := true
 #KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(call intermediates-dir-for,DLKM,swr_dlkm)/Module.symvers
 #LOCAL_REQUIRED_MODULES    := swr_dlkm
 #LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,swr_dlkm)/Module.symvers
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
+################################ i2s ################################
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES           := $(BT_SRC_FILES)
+LOCAL_MODULE              := btfm_i2s.ko
+LOCAL_MODULE_KBUILD_NAME  := i2s/btfm_i2s.ko
+LOCAL_MODULE_TAGS         := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 else

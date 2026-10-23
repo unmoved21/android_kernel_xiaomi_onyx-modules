@@ -26,6 +26,7 @@ def define_sun():
             "btfm_slim_codec",
             "btfmcodec",
             "bt_fm_swr",
+            "btfm_i2s",
          ],
          config_options = [
              "CONFIG_MSM_BT_POWER",
@@ -34,7 +35,8 @@ def define_sun():
              "CONFIG_BTFM_CODEC",
            #  "CONFIG_BT_HW_SECURE_DISABLE",
              "CONFIG_BTFM_SWR",
-	     "CONFIG_FMD_ENABLE",
+             "CONFIG_FMD_ENABLE",
+             "CONFIG_BTFM_I2S",
         ]
     )
 

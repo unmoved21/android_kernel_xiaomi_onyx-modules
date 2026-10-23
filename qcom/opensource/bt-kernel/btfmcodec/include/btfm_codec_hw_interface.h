@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __LINUX_BTFM_CODEC_HW_INTERFACE_H
@@ -19,6 +19,7 @@
  */
 #define BTADV_AUDIO_MASTER_CONFIG	0
 #define BTADV_CONFIGURE_DMA             1
+#define BTADV_CONFIGURE_I2S    2
 #define DEVICE_NAME_MAX_LEN	64
 
 struct hwep_configurations {
@@ -53,6 +54,18 @@ struct hwep_dma_configurations {
 	uint8_t lpaif; // Low power audio interface
 	uint8_t inf_index; // interface index
 	uint8_t active_channel_mask;
+};
+
+struct hwep_i2s_configurations {
+	uint8_t  stream_id;
+	uint32_t sample_rate;
+	uint8_t  bit_width;
+	uint8_t  num_channels;
+	uint8_t  channel_mode;      /* SD line / channel mode (enum i2s_channel_mode) */
+	uint8_t  channel_mask;      /* active channel mask */
+	uint8_t  codec_id;          /* codec type */
+	uint8_t  lpaif_type;        /* LPAIF instance */
+	uint8_t  intf_idx;          /* I2S interface index */
 };
 
 struct hwep_comp_drv {

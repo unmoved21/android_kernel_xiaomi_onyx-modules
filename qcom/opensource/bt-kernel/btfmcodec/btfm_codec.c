@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/slab.h>
@@ -219,6 +219,22 @@ static void btfmcodec_dev_rxwork(struct work_struct *work)
 				btfmcodec_dev->status[idx] = BTM_FAIL_RESP_RECV;
 			}
 			BTFMCODEC_INFO("Rx BTM_BTFMCODEC_CODEC_CONFIG_DMA_RSP status:%d",
+				status);
+			wake_up_interruptible(&btfmcodec_dev->rsp_wait_q[idx]);
+			break;
+		case BTM_BTFMCODEC_CODEC_CONFIG_I2S_RSP:
+			idx = BTM_PKT_TYPE_I2S_CONFIG_RSP;
+			if (len == BTM_CODEC_CONFIG_I2S_RSP_LEN) {
+				status = skb->data[1];
+				if (status == MSG_SUCCESS)
+					btfmcodec_dev->status[idx] = BTM_RSP_RECV;
+				else
+					btfmcodec_dev->status[idx] = BTM_FAIL_RESP_RECV;
+			} else {
+				BTFMCODEC_ERR("wrong packet format with len:%d", len);
+				btfmcodec_dev->status[idx] = BTM_FAIL_RESP_RECV;
+			}
+			BTFMCODEC_INFO("Rx BTM_BTFMCODEC_CODEC_CONFIG_I2S_RSP status:%d",
 				status);
 			wake_up_interruptible(&btfmcodec_dev->rsp_wait_q[idx]);
 			break;
@@ -569,17 +585,21 @@ static long btfmcodec_ioctl(struct file *file, unsigned int cmd, unsigned long a
 				set_bit(BTADV_AUDIO_MASTER_CONFIG, &hwep_info->flags);
 			else if (!strcmp(hwep_info->driver_name, "btfmswr_slave"))
 				set_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags);
+			else if (!strcmp(hwep_info->driver_name, "btfmi2s_slave"))
+				set_bit(BTADV_CONFIGURE_I2S, &hwep_info->flags);
 			BTFMCODEC_INFO("%s: This target support CP hwep %s",
 					__func__, hwep_info->driver_name);
 		} else {
 			clear_bit(BTADV_AUDIO_MASTER_CONFIG, &hwep_info->flags);
 			clear_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags);
+			clear_bit(BTADV_CONFIGURE_I2S, &hwep_info->flags);
 			BTFMCODEC_INFO("%s: This target support doesn't CP", __func__);
 		}
 
-	BTFMCODEC_INFO("%s: mastr %d dma codec %d", __func__,
+	BTFMCODEC_INFO("%s: mastr %d dma codec %d i2s codec %d", __func__,
 			(int)test_bit(BTADV_AUDIO_MASTER_CONFIG, &hwep_info->flags),
-			(int)test_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags));
+			(int)test_bit(BTADV_CONFIGURE_DMA, &hwep_info->flags),
+			(int)test_bit(BTADV_CONFIGURE_I2S, &hwep_info->flags));
 		break;
 	} default: {
 		BTFMCODEC_ERR("%s unhandled cmd %04x", __func__, cmd);

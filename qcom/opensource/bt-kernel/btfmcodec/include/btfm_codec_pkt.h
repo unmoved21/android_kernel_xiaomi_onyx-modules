@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __LINUX_BTFM_CODEC_PKT_H
@@ -40,6 +40,8 @@ struct btm_ctrl_pkt {
 #define BTM_BTFMCODEC_CTRL_MASTER_SHUTDOWN_RSP                  0x50000005
 #define BTM_BTFMCODEC_CODEC_CONFIG_DMA_REQ                      0x58000006
 #define BTM_BTFMCODEC_CODEC_CONFIG_DMA_RSP                      0x58000007
+#define BTM_BTFMCODEC_CODEC_CONFIG_I2S_REQ                      0x5800000A
+#define BTM_BTFMCODEC_CODEC_CONFIG_I2S_RSP                      0x5800000B
 
 #define BTM_BTFMCODEC_BEARER_SWITCH_IND                         0x58000001
 #define BTM_BTFMCODEC_TRANSPORT_SWITCH_FAILED_IND               0x58000002
@@ -51,6 +53,7 @@ struct btm_ctrl_pkt {
 #define BTM_MASTER_CONFIG_RSP_TIMEOUT			5000
 #define BTM_BEARER_SWITCH_IND_TIMEOUT			25000
 #define BTM_MASTER_DMA_CONFIG_RSP_TIMEOUT		5000
+#define BTM_MASTER_I2S_CONFIG_RSP_TIMEOUT		5000
 #define BTM_HEADER_LEN					8
 #define BTM_PREPARE_AUDIO_BEARER_SWITCH_RSP_LEN		2
 #define BTM_MASTER_CONFIG_RSP_LEN			2
@@ -61,6 +64,8 @@ struct btm_ctrl_pkt {
 #define BTM_LOG_LVL_IND_LEN                             1
 #define BTM_ADSP_STATE_IND_LEN				4
 #define BTM_CODEC_CONFIG_DMA_REQ_LEN			11
+#define BTM_CODEC_CONFIG_I2S_REQ_LEN			12
+#define BTM_CODEC_CONFIG_I2S_RSP_LEN			2
 #define BTM_PORT_STATE_IND_LEN				1
 
 #define BTM_BTFMCODEC_USECASE_START_REQ			0x58000008
@@ -116,6 +121,20 @@ struct btm_dma_config_req {
 	uint8_t lpaif;     // Low power audio interface
 	uint8_t inf_index; // interface index
 	uint8_t active_channel_mask;
+} __packed;
+
+struct btm_i2s_config_req {
+	btm_opcode opcode;
+	uint32_t len;
+	uint8_t stream_id;
+	uint32_t sample_rate;
+	uint8_t bit_width;
+	uint8_t num_channels;
+	uint8_t channel_mode;   // SD line / channel mode (enum i2s_channel_mode)
+	uint8_t channel_mask;   // active channel mask
+	uint8_t codec_id;       // codec type
+	uint8_t lpaif_type;     // Low power audio interface
+	uint8_t intf_idx;       // interface index
 } __packed;
 
 struct btm_usecase_start_ind {

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config BTFM_I2S
+	tristate "MSM Bluetooth/FM I2S Device"
+	depends on SND_SOC && MSM_BT_POWER
+	help
+		This enables Bluetooth audio over the I2S
+		interface on platforms that use I2S
+
+		Say Y here to compile support for Bluetooth/FM over I2S
+		into the kernel or say M to compile as a module.
