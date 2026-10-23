@@ -600,10 +600,15 @@ static int msm_smmu_probe(struct platform_device *pdev)
 	mutex_unlock(&smmu_list_lock);
 
 	ret = component_add(&pdev->dev, &msm_smmu_comp_ops);
-	if (ret)
+	if (ret) {
 		pr_err("component add failed\n");
+		mutex_lock(&smmu_list_lock);
+		list_del(&client->smmu_list);
+		mutex_unlock(&smmu_list_lock);
+		return ret;
+	}
 
-	return ret;
+	return 0;
 }
 
 static int msm_smmu_remove(struct platform_device *pdev)

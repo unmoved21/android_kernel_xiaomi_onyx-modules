@@ -6363,6 +6363,12 @@ void reg_dmav1_setup_spr_udc_cfgv2(struct sde_hw_dspp *ctx, void *cfg)
 			uint32_t index  = i * (SPR_UDC_PARAM_SIZE_2 / 3);
 			uint32_t line_cnt = (lines[i] + 1) >> 1;
 
+			if (line_cnt > SPR_UDC_MAX_REG_CNT) {
+				DRM_ERROR("invalid UDC line_cnt %u for region %u\n",
+					  line_cnt, i);
+				goto cleanup;
+			}
+
 			if (i == 0)
 				j = (SPR_UDC_PARAM_SIZE_2 / 12) * 2;
 			else if (i == 1)
@@ -7492,10 +7498,14 @@ void reg_dmav1_setup_demura_cfg0_param2(struct sde_hw_dspp *ctx, void *cfg)
 		DRM_ERROR("write decode select failed ret %d\n", rc);
 		return;
 	}
+	len = dcfg->cfg0_param2_len;
+	if (!len || len > CFG0_PARAM2_LEN) {
+		DRM_ERROR("invalid cfg0_param2_len %d, max %d\n", len, CFG0_PARAM2_LEN);
+		return;
+	}
 	temp = kvzalloc(sizeof(struct drm_msm_dem_cfg0_param2), GFP_KERNEL);
 	if (!temp)
 		return;
-	len = dcfg->cfg0_param2_len;
 	for (i = 0; i < 3; i++) {
 		if (!i)
 			p = dcfg->cfg0_param2_c0;

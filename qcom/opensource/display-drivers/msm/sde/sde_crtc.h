@@ -370,6 +370,7 @@ enum sde_crtc_hw_fence_flags {
  * @cached_encoder_mask : cached encoder_mask for vblank work
  * @line_time_in_ns : current mode line time in nano sec is needed for QOS update
  * @frame_data      : Framedata data structure
+ * @frame_data_lock : spinlock to protect framedata allocation, free and access
  * @previous_opr_value : store previous opr values
  * @opr_event_notify_enabled : Flag to indicate if opr event notify is enabled or not
  * @hwfence_features_mask : u32 mask to enable/disable hw fence features. See enum
@@ -491,6 +492,7 @@ struct sde_crtc {
 	u32 line_time_in_ns;
 
 	struct sde_frame_data frame_data;
+	spinlock_t frame_data_lock;
 
 	struct sde_opr_value previous_opr_value;
 	bool opr_event_notify_enabled;
